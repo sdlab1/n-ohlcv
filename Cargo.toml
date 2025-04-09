@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-eframe = { version = "0.27", features = ["wgpu"] }
-egui = "0.27"
-wgpu = "0.19"
-pollster = "0.3"
-reqwest = { version = "0.11", features = ["blocking", "json"] } # Для HTTP и JSON
-sled = "0.34" # Встроенная key-value база
-lzf = "1.0" # Простое сжатие LZF
-serde = { version = "1.0", features = ["derive"] } # Для десериализации JSON
-serde_json = "1.0" # Для работы с JSON
-chrono = "0.4" # Для работы с датами и временем
+lazy_static = "1.4.0"
+chrono = { version = "0.4.31", features = ["serde"] }
+sled = "0.34.7"
+reqwest = { version = "0.11.23", features = ["blocking", "json"] }
+serde = { version = "1.0.193", features = ["derive"] }
+serde_json = "1.0.108"
+egui = "0.26.0"
+eframe = { version = "0.26.0", features = ["wgpu"] }
+wgpu = "0.19.3"
+flate2 = { version = "1.0.28", features = ["zlib"] }

@@ -1,8 +1,6 @@
 use reqwest::blocking::Client;
-use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration};
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct KLine {
     pub open_time: i64,
     pub open: String,
@@ -12,7 +10,13 @@ pub struct KLine {
     pub volume: String,
 }
 
-pub fn fetch_klines(client: &Client, symbol: &str, interval: &str, limit: i64, start_time: Option<i64>) -> Result<Vec<KLine>, reqwest::Error> {
+pub fn fetch_klines(
+    client: &Client,
+    symbol: &str,
+    interval: &str,
+    limit: i64,
+    start_time: Option<i64>,
+) -> Result<Vec<KLine>, reqwest::Error> {
     let mut url = format!(
         "https://api.binance.com/api/v3/klines?symbol={}&interval={}&limit={}",
         symbol, interval, limit
@@ -23,7 +27,6 @@ pub fn fetch_klines(client: &Client, symbol: &str, interval: &str, limit: i64, s
 
     let response = client.get(&url).send()?;
     
-    // Проверка статуса ошибки
     if response.status() == 429 {
         return Err(response.error_for_status().unwrap_err());
     }
@@ -43,6 +46,19 @@ pub fn fetch_klines(client: &Client, symbol: &str, interval: &str, limit: i64, s
         .collect();
 
     let filtered_klines = klines[..klines.len().saturating_sub(1)].to_vec();
-    println!("Fetched {} klines from Binance API", filtered_klines.len());
+    println!("Fetched {} klines for {}", filtered_klines.len(), symbol);
     Ok(filtered_klines)
+}
+
+impl KLine {
+    pub fn to_json_array(&self) -> Vec<serde_json::Value> {
+        vec![
+            self.open_time.into(),
+            self.open.clone().into(),
+            self.high.clone().into(),
+            self.low.clone().into(),
+            self.close.clone().into(),
+            self.volume.clone().into(),
+        ]
+    }
 }

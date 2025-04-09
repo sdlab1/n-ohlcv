@@ -1,87 +1,111 @@
-use eframe::{egui, Frame, NativeOptions};
+use eframe::{Frame, egui};
+use reqwest::blocking::Client;
 use std::sync::Arc;
-use wgpu::{Backends, DeviceDescriptor, Features, Limits, SurfaceError};
-use crate::timeframe::Timeframe;
-use crate::db::Database;
-mod timeframe;
-mod fetch;
+use std::thread;
+
 mod compress;
 mod db;
+mod fetch;
+mod timeframe;
+mod gpu_backend;
 
-struct App {
-    timeframe: Option<Timeframe>,
+struct TradingApp {
+    db: Arc<db::Database>,
+    symbols: Vec<String>,
+    selected_symbol: String,
+    status_messages: Vec<String>,
 }
 
-impl eframe::App for App {
+impl TradingApp {
+    fn new(db: Arc<db::Database>) -> Self {
+        let symbols = vec![
+            "BTCUSDT".to_string(),
+            "ETHUSDT".to_string(),
+            "BNBUSDT".to_string(),
+        ];
+        
+        Self {
+            db,
+            symbols: symbols.clone(),
+            selected_symbol: symbols[0].clone(),
+            status_messages: Vec::new(),
+        }
+    }
+
+    fn log_status(&mut self, message: String) {
+        self.status_messages.push(message);
+        if self.status_messages.len() > 100 {
+            self.status_messages.remove(0);
+        }
+    }
+}
+
+impl eframe::App for TradingApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("n-ohlcv");
+            ui.heading("n-ohlcv Multi-Ticker Monitor");
 
-            if let Some(tf) = &self.timeframe {
-                ui.label(format!("Data ready from {} to {}", tf.start_date, tf.end_date));
-                ui.label(format!("Total minutes: {}", tf.total_minutes));
-                ui.label(format!("Current price: {}", tf.current_price));
-            } else {
-                ui.label("Preparing data...");
+            egui::ComboBox::from_label("Select Ticker")
+                .selected_text(&self.selected_symbol)
+                .show_ui(ui, |ui| {
+                    for symbol in &self.symbols {
+                        ui.selectable_value(&mut self.selected_symbol, symbol.clone(), symbol);
+                    }
+                });
+
+            if let Ok(last_block) = self.db.get_last_block(&self.selected_symbol) {
+                ui.label(format!(
+                    "Last block for {}: {}",
+                    self.selected_symbol,
+                    chrono::DateTime::from_timestamp_millis(last_block)
+                        .unwrap()
+                        .format("%Y-%m-%d %H:%M:%S")
+                ));
             }
+
+            if ui.button("Force Update").clicked() {
+                let client = Client::new();
+                let db = Arc::clone(&self.db);
+                let symbol_clone = self.selected_symbol.clone();
+                
+                thread::spawn(move || {
+                    if let Err(e) = timeframe::Timeframe::fetch_and_process(&client, &db, &symbol_clone) {
+                        eprintln!("Error: {}", e);
+                    }
+                });
+                
+                self.log_status(format!("Manual update triggered for {}", self.selected_symbol));
+            }
+
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for msg in &self.status_messages {
+                    ui.label(msg);
+                }
+            });
         });
     }
 }
 
-fn main() -> Result<(), eframe::Error> {
-    let client = reqwest::blocking::Client::new();
-    let db = Database::new("n-ohlcv-sled-db").expect("Failed to initialize database");
+fn main() -> eframe::Result<()> {
+    let db = Arc::new(db::Database::new("ohlcv_db").expect("DB init failed"));
 
-    // Проверка последнего сохраненного времени
-    if let Ok(Some(last_time)) = db.get_last_time() {
-        println!("Resuming from last saved time: {}", last_time);
+    let symbols = vec!["BTCUSDT", "ETHUSDT", "BNBUSDT"];
+    let client = Client::new();
+
+    for symbol in symbols {
+        let client = client.clone();
+        let db = Arc::clone(&db);
+        
+        thread::spawn(move || {
+            if let Err(e) = timeframe::Timeframe::run_forever(&client, &db, symbol) {
+                eprintln!("Processor for {} crashed: {}", symbol, e);
+            }
+        });
     }
-    // Загружаем данные
-    let timeframe = match Timeframe::fetch_and_store(&client, &db) {
-        Ok(tf) => {
-            println!("Data preparation completed successfully");
-            Some(tf)
-        }
-        Err(e) => {
-            eprintln!("Data preparation failed: {}", e);
-            None
-        }
-    };
-
-    let options = NativeOptions {
-        renderer: eframe::Renderer::Wgpu,
-        wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
-            device_descriptor: Arc::new(|_adapter| DeviceDescriptor {
-                label: Some("egui wgpu device"),
-                required_features: Features::empty(),
-                required_limits: Limits::downlevel_webgl2_defaults(),
-            }),
-            supported_backends: Backends::all(),
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            present_mode: wgpu::PresentMode::Fifo,
-            desired_maximum_frame_latency: Some(2),
-            on_surface_error: Arc::new(|err| {
-                eprintln!("WGPU surface error: {:?}", err);
-                match err {
-                    SurfaceError::Timeout => eframe::egui_wgpu::SurfaceErrorAction::SkipFrame,
-                    SurfaceError::Outdated | SurfaceError::Lost => eframe::egui_wgpu::SurfaceErrorAction::RecreateSurface,
-                    SurfaceError::OutOfMemory => {
-                        eprintln!("WGPU out of memory! Exiting.");
-                        std::process::exit(-1);
-                    }
-                }
-            }),
-            ..Default::default()
-        },
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([800.0, 600.0])
-            .with_min_inner_size([300.0, 200.0]),
-        ..Default::default()
-    };
 
     eframe::run_native(
-        "n-ohlcv [Rust+egui]",
-        options,
-        Box::new(|_cc| Box::new(App { timeframe })),
+        "n-ohlcv",
+        gpu_backend::native_options(),
+        Box::new(|_cc| Box::new(TradingApp::new(db))),
     )
 }
