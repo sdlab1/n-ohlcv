@@ -1,32 +1,30 @@
-use flate2::{Compress, Compression, FlushCompress};
+// compress.rs
+use flate2::{Compress, Decompress, Compression, FlushCompress, FlushDecompress};
+use std::io::{Error, ErrorKind};
 use crate::fetch::KLine;
 
-pub fn compress_klines(klines: &[KLine]) -> Vec<u8> {
-    // Сериализуем сразу в массив без ключей
-    let json_array: Vec<_> = klines.iter()
-        .map(|k| k.to_json_array())
-        .collect();
-    
-    let serialized = serde_json::to_vec(&json_array).unwrap();
-    
-    // Сжимаем только если выгодно
-    if serialized.len() > 1024 {
-        compress_data(&serialized)
-    } else {
-        serialized
-    }
-}
-
-fn compress_data(data: &[u8]) -> Vec<u8> {
+pub fn compress_data(data: &[u8]) -> Result<Vec<u8>, Error> {
     let mut compressor = Compress::new(Compression::best(), true);
     let mut output = Vec::with_capacity(data.len() / 2);
-    
-    compressor.compress_vec(data, &mut output, FlushCompress::Finish)
-        .unwrap();
+    compressor.compress_vec(data, &mut output, FlushCompress::Finish)?;
+    Ok(output)
+}
 
-    if output.len() < data.len() {
-        output
-    } else {
-        data.to_vec()
-    }
+pub fn decompress_data(data: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut decompressor = Decompress::new(true);
+    let mut output = Vec::with_capacity(data.len() * 2);
+    decompressor.decompress_vec(data, &mut output, FlushDecompress::Finish)?;
+    Ok(output)
+}
+
+pub fn compress_klines(klines: &[KLine]) -> Result<Vec<u8>, Error> {
+    let serialized = serde_json::to_vec(klines)
+        .map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+    compress_data(&serialized)
+}
+
+pub fn decompress_klines(data: &[u8]) -> Result<Vec<KLine>, Error> {
+    let decompressed = decompress_data(data)?;
+    serde_json::from_slice(&decompressed)
+        .map_err(|e| Error::new(ErrorKind::InvalidData, e))
 }

@@ -1,6 +1,9 @@
+// fetch.rs
 use reqwest::blocking::Client;
+use serde_json;
+use std::error::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct KLine {
     pub open_time: i64,
     pub open: String,
@@ -16,49 +19,36 @@ pub fn fetch_klines(
     interval: &str,
     limit: i64,
     start_time: Option<i64>,
-) -> Result<Vec<KLine>, reqwest::Error> {
+    end_time: Option<i64>,
+) -> Result<Vec<KLine>, Box<dyn Error>> {
     let mut url = format!(
         "https://api.binance.com/api/v3/klines?symbol={}&interval={}&limit={}",
         symbol, interval, limit
     );
+
     if let Some(start) = start_time {
         url.push_str(&format!("&startTime={}", start));
     }
-
-    let response = client.get(&url).send()?;
-    
-    if response.status() == 429 {
-        return Err(response.error_for_status().unwrap_err());
+    if let Some(end) = end_time {
+        url.push_str(&format!("&endTime={}", end));
     }
 
-    let response = response.json::<Vec<Vec<serde_json::Value>>>()?;
-    
-    let klines: Vec<KLine> = response
+    let response = client.get(&url).send()?;
+    if !response.status().is_success() {
+        return Err(format!("API error: {}", response.status()).into());
+    }
+
+    let klines = response.json::<Vec<Vec<serde_json::Value>>>()?
         .into_iter()
         .map(|k| KLine {
-            open_time: k[0].as_i64().unwrap(),
-            open: k[1].as_str().unwrap().to_string(),
-            high: k[2].as_str().unwrap().to_string(),
-            low: k[3].as_str().unwrap().to_string(),
-            close: k[4].as_str().unwrap().to_string(),
-            volume: k[5].as_str().unwrap().to_string(),
+            open_time: k[0].as_i64().unwrap_or(0),
+            open: k[1].as_str().unwrap_or("0").to_string(),
+            high: k[2].as_str().unwrap_or("0").to_string(),
+            low: k[3].as_str().unwrap_or("0").to_string(),
+            close: k[4].as_str().unwrap_or("0").to_string(),
+            volume: k[5].as_str().unwrap_or("0").to_string(),
         })
         .collect();
 
-    let filtered_klines = klines[..klines.len().saturating_sub(1)].to_vec();
-    println!("Fetched {} klines for {}", filtered_klines.len(), symbol);
-    Ok(filtered_klines)
-}
-
-impl KLine {
-    pub fn to_json_array(&self) -> Vec<serde_json::Value> {
-        vec![
-            self.open_time.into(),
-            self.open.clone().into(),
-            self.high.clone().into(),
-            self.low.clone().into(),
-            self.close.clone().into(),
-            self.volume.clone().into(),
-        ]
-    }
+    Ok(klines)
 }

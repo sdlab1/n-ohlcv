@@ -1,4 +1,8 @@
+// db.rs
 use sled;
+use crate::fetch::KLine;
+use crate::compress;
+use std::error::Error;
 
 pub struct Database {
     db: sled::Db,
@@ -6,47 +10,49 @@ pub struct Database {
 
 impl Database {
     pub fn new(path: &str) -> Result<Self, sled::Error> {
-        let db = sled::open(path)?;
-        Ok(Database { db })
+        sled::open(path).map(|db| Self { db })
     }
 
-    pub fn insert_ticker_data(&self, symbol: &str, timestamp: i64, data: &[u8]) -> Result<(), sled::Error> {
+    pub fn insert_block(
+        &self,
+        symbol: &str,
+        timestamp: i64,
+        data: &[KLine],
+    ) -> Result<(), Box<dyn Error>> {
         let key = format!("{}_{}", symbol, timestamp);
-        self.db.insert(key.as_bytes(), data)?;
-        Ok(())
-    }
-
-    pub fn get_ticker_data(&self, symbol: &str, timestamp: i64) -> Result<Option<sled::IVec>, sled::Error> {
-        let key = format!("{}_{}", symbol, timestamp);
-        self.db.get(key.as_bytes())
-    }
-
-    pub fn set_last_block(&self, symbol: &str, timestamp: i64) -> Result<(), sled::Error> {
-        let key = format!("last_block_{}", symbol);
-        self.db.insert(key.as_bytes(), &timestamp.to_be_bytes())?;
-        Ok(())
-    }
-
-    pub fn get_last_block(&self, symbol: &str) -> Result<i64, sled::Error> {
-        let key = format!("last_block_{}", symbol);
-        match self.db.get(key.as_bytes())? {
-            Some(bytes) => {
-                let arr: [u8; 8] = bytes.as_ref().try_into().unwrap();
-                Ok(i64::from_be_bytes(arr))
-            },
-            None => Ok(0)
-        }
-    }
-
-    pub fn get_all_symbols(&self) -> Result<Vec<String>, sled::Error> {
-        let mut symbols = std::collections::HashSet::new();
-        for key in self.db.scan_prefix("last_block_") {
-            let key_entry = key?;
-            let key_str = String::from_utf8_lossy(&key_entry.0);
-            if let Some(symbol) = key_str.strip_prefix("last_block_") {
-                symbols.insert(symbol.to_string());
+        let compressed = compress::compress_klines(data)?;
+        
+        self.db.transaction(|tx| {
+            // First insert
+            match tx.insert(key.as_bytes(), compressed.clone()) {
+                Ok(_) => {},
+                Err(e) => return Err(sled::transaction::ConflictableTransactionError::Abort(e)),
             }
+            
+            // Second insert
+            match tx.insert(format!("last_{}", symbol).as_bytes(), &timestamp.to_be_bytes()) {
+                Ok(_) => {},
+                Err(e) => return Err(sled::transaction::ConflictableTransactionError::Abort(e)),
+            }
+            
+            Ok(())
+        })?;
+        
+        Ok(())
+    }
+
+    pub fn get_block(&self, symbol: &str, timestamp: i64) -> Result<Option<Vec<KLine>>, Box<dyn std::error::Error>> {
+        let key = format!("{}_{}", symbol, timestamp);
+        match self.db.get(key.as_bytes())? {
+            Some(data) => Ok(Some(compress::decompress_klines(&data)?)),
+            None => Ok(None),
         }
-        Ok(symbols.into_iter().collect())
+    }
+
+    pub fn get_last_timestamp(&self, symbol: &str) -> Result<i64, sled::Error> {
+        match self.db.get(format!("last_{}", symbol))? {
+            Some(bytes) => Ok(i64::from_be_bytes(bytes.as_ref().try_into().unwrap())),
+            None => Ok(0),
+        }
     }
 }

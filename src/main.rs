@@ -1,8 +1,14 @@
+// main.rs
 use eframe::{Frame, egui};
 use reqwest::blocking::Client;
+use timeframe::Timeframe;
 use std::sync::Arc;
 use std::thread;
+use chrono;
 
+mod axes;
+mod hlcbars;
+mod volbars;
 mod compress;
 mod db;
 mod fetch;
@@ -11,26 +17,56 @@ mod gpu_backend;
 
 struct TradingApp {
     db: Arc<db::Database>,
-    symbols: Vec<String>,
-    selected_symbol: String,
+    data_window: DataWindow,
+    timeframe: i32,
     status_messages: Vec<String>,
 }
 
+#[derive(Debug)]
+pub struct DataWindow {
+    bars: Vec<Bar>,
+    visible_range: (f64, f64),
+    volume_height_ratio: f32,
+}
+
+#[derive(Debug, Clone)]
+pub struct Bar {
+    time: i64,
+    open: f64,
+    high: f64,
+    low: f64,
+    close: f64,
+    volume: f64,
+}
+
 impl TradingApp {
-    fn new(db: Arc<db::Database>) -> Self {
-        let symbols = vec![
-            "BTCUSDT".to_string(),
-            "ETHUSDT".to_string(),
-            "BNBUSDT".to_string(),
-        ];
-        
-        Self {
-            db,
-            symbols: symbols.clone(),
-            selected_symbol: symbols[0].clone(),
-            status_messages: Vec::new(),
+// In main.rs
+fn new(db: Arc<db::Database>, cc: &eframe::CreationContext<'_>) -> Self {
+    let now = chrono::Utc::now().timestamp_millis();
+    let start_time = now - chrono::Duration::days(7).num_milliseconds();
+    
+    let data_window = Timeframe::get_data_window(
+        &db,
+        "BTCUSDT",
+        start_time,
+        now,
+        5 // default 5-minute timeframe
+    ).unwrap_or_else(|e| {
+        eprintln!("Initial data load failed: {}", e);
+        DataWindow {
+            bars: Vec::new(),
+            visible_range: (0.0, 1.0),
+            volume_height_ratio: 0.2,
         }
+    });
+
+    Self {
+        db,
+        data_window,
+        timeframe: 5,
+        status_messages: vec!["Application started".to_string()],
     }
+}
 
     fn log_status(&mut self, message: String) {
         self.status_messages.push(message);
@@ -38,45 +74,62 @@ impl TradingApp {
             self.status_messages.remove(0);
         }
     }
+
+    fn update_data_window(&mut self) {
+        let now = chrono::Utc::now().timestamp_millis();
+        let start_time = now - chrono::Duration::days(7).num_milliseconds();
+        
+        match Timeframe::get_data_window(
+            &self.db,
+            "BTCUSDT",
+            start_time,
+            now,
+            self.timeframe
+        ) {
+            Ok(data_window) => {
+                self.data_window = data_window;
+                self.log_status(format!("Updated view with {} bars", self.data_window.bars.len()));
+            },
+            Err(e) => {
+                self.log_status(format!("Error updating data: {}", e));
+            }
+        }
+    }
 }
 
 impl eframe::App for TradingApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("n-ohlcv Multi-Ticker Monitor");
+            ui.heading("BTC/USDT OHLCV Viewer");
 
-            egui::ComboBox::from_label("Select Ticker")
-                .selected_text(&self.selected_symbol)
-                .show_ui(ui, |ui| {
-                    for symbol in &self.symbols {
-                        ui.selectable_value(&mut self.selected_symbol, symbol.clone(), symbol);
+            // Timeframe selection
+            ui.horizontal(|ui| {
+                for &tf in &[1, 2, 3, 5, 10, 15, 30, 60, 240, 1440] {
+                    if ui.button(format!("{}m", tf)).clicked() {
+                        self.timeframe = tf;
+                        self.update_data_window();
                     }
-                });
+                }
+            });
 
-            if let Ok(last_block) = self.db.get_last_block(&self.selected_symbol) {
-                ui.label(format!(
-                    "Last block for {}: {}",
-                    self.selected_symbol,
-                    chrono::DateTime::from_timestamp_millis(last_block)
-                        .unwrap()
-                        .format("%Y-%m-%d %H:%M:%S")
-                ));
-            }
+            // Main chart area
+            egui::Frame::canvas(ui.style()).show(ui, |ui| {
+                let (rect, _) = ui.allocate_exact_size(
+                    ui.available_size(),
+                    egui::Sense::drag(),
+                );
 
-            if ui.button("Force Update").clicked() {
-                let client = Client::new();
-                let db = Arc::clone(&self.db);
-                let symbol_clone = self.selected_symbol.clone();
-                
-                thread::spawn(move || {
-                    if let Err(e) = timeframe::Timeframe::fetch_and_process(&client, &db, &symbol_clone) {
-                        eprintln!("Error: {}", e);
-                    }
-                });
-                
-                self.log_status(format!("Manual update triggered for {}", self.selected_symbol));
-            }
+                // Draw axes
+                axes::draw(ui, rect, &self.data_window);
 
+                // Draw HL bars
+                hlcbars::draw(ui, rect, &self.data_window);
+
+                // Draw volume bars
+                volbars::draw(ui, rect, &self.data_window);
+            });
+
+            // Status messages
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for msg in &self.status_messages {
                     ui.label(msg);
@@ -88,24 +141,17 @@ impl eframe::App for TradingApp {
 
 fn main() -> eframe::Result<()> {
     let db = Arc::new(db::Database::new("ohlcv_db").expect("DB init failed"));
-
-    let symbols = vec!["BTCUSDT", "ETHUSDT", "BNBUSDT"];
-    let client = Client::new();
-
-    for symbol in symbols {
-        let client = client.clone();
-        let db = Arc::clone(&db);
-        
-        thread::spawn(move || {
-            if let Err(e) = timeframe::Timeframe::run_forever(&client, &db, symbol) {
-                eprintln!("Processor for {} crashed: {}", symbol, e);
-            }
-        });
-    }
+    
+    // Start data updater thread
+    let db_clone = db.clone();
+    thread::spawn(move || {
+        let client = Client::new();
+        timeframe::update_loop(&client, &db_clone, "BTCUSDT");
+    });
 
     eframe::run_native(
-        "n-ohlcv",
+        "BTC/USDT OHLCV",
         gpu_backend::native_options(),
-        Box::new(|_cc| Box::new(TradingApp::new(db))),
+        Box::new(|cc| Box::new(TradingApp::new(db, cc))),
     )
 }

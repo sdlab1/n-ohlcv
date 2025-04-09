@@ -14,3 +14,5 @@ egui = "0.26.0"
 eframe = { version = "0.26.0", features = ["wgpu"] }
 wgpu = "0.19.3"
 flate2 = { version = "1.0.28", features = ["zlib"] }
+anyhow = "1.0.75"
+thiserror = "1.0.50"
