@@ -21,7 +21,6 @@ impl Database {
     ) -> Result<(), Box<dyn Error>> {
         let key = format!("{}_{}", symbol, timestamp);
         let compressed = compress::compress_klines(data)?;
-        
         self.db.transaction(|tx| {
             // First insert
             match tx.insert(key.as_bytes(), compressed.clone()) {
