@@ -4,10 +4,11 @@ use eframe::egui;
 pub fn native_options() -> eframe::NativeOptions {
     eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size(egui::vec2(800.0, 600.0))
+            .with_maximized(true)
+            .with_inner_size(egui::vec2(1200.0, 800.0))
             .with_min_inner_size(egui::vec2(300.0, 200.0)),
         // These are the default WGPU settings that eframe uses internally
-        multisampling: 0,
+        multisampling: 4,
         depth_buffer: 0,
         stencil_buffer: 0,
         renderer: eframe::Renderer::Wgpu,

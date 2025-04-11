@@ -1,7 +1,8 @@
 use reqwest::blocking::Client;
+use serde;
 use serde_json;
 use std::error::Error;
-use serde::{Serialize, Deserialize};
+
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, bincode::Encode, bincode::Decode)]
 pub struct KLine {

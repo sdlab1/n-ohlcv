@@ -14,6 +14,7 @@ mod fetch;
 mod timeframe;
 mod gpu_backend;
 mod app_ui;
+mod crosshair;
 
 struct TradingApp {
     db: Arc<db::Database>,
@@ -21,7 +22,9 @@ struct TradingApp {
     timeframe: i32,
     status_messages: Vec<String>,
     symbol: String,
-    scroll_sensitivity: f32,
+    zoom_sensitivity: f64,
+    show_candles: bool,
+    crosshair: crosshair::Crosshair,
 }
 
 #[derive(Debug)]
@@ -46,8 +49,7 @@ impl TradingApp {
         let now = chrono::Utc::now().timestamp_millis();
         let start_time = now - chrono::Duration::days(7).num_milliseconds();
 
-        // Rely on get_data_window to initialize DB if needed
-        let data_window = match Timeframe::get_data_window(&db, symbol, start_time, now, 5) {
+        let data_window = match Timeframe::get_data_window(&db, symbol, start_time, now, 15) {
             Ok(data_window) => data_window,
             Err(e) => {
                 eprintln!("Initial data load failed: {}", e);
@@ -62,11 +64,31 @@ impl TradingApp {
         Self {
             db,
             data_window,
-            timeframe: 5,
+            timeframe: 10,
             status_messages: vec![format!("Application started for {}", symbol)],
             symbol: symbol.to_string(),
-            scroll_sensitivity: 0.2,
+            zoom_sensitivity: 0.01,
+            show_candles: true,
+            crosshair: crosshair::Crosshair::default(),
         }
+    }
+
+    fn zoom(&mut self, amount: f64) {
+        let zoom_factor = self.zoom_sensitivity;
+        let (current_start, current_end) = self.data_window.visible_range;
+        let range_width = current_end - current_start;
+        
+        let new_width = if amount > 0.0 {
+            range_width * (1.0 - zoom_factor).max(0.01)
+        } else {
+            range_width * (1.0 + zoom_factor).max(0.01)
+        };
+        
+        let center = (current_start + current_end) / 2.0;
+        let new_start = (center - new_width / 2.0).max(0.0);
+        let new_end = (new_start + new_width).min(1.0);
+        
+        //self.data_window.visible_range = (new_start, new_end);
     }
 
     fn log_status(&mut self, message: String) {
