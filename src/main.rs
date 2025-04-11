@@ -33,6 +33,7 @@ pub struct DataWindow {
     bars: Vec<Bar>,
     visible_range: (f64, f64),
     recent_data: Vec<KLine>,
+    timeframe_remainder: Vec<KLine>,
     volume_height_ratio: f32,
 }
 
@@ -47,35 +48,42 @@ pub struct Bar {
 }
 
 impl TradingApp {
-    fn new(db: &Arc<Database>, symbol: &str) -> Self {
-        let now = Utc::now().timestamp_millis();
-        let start_time = now - Duration::days(7).num_milliseconds();
+    fn new(cc: &eframe::CreationContext<'_>, db: Arc<Database>, symbol: &str) -> Self {
+        println!("Создание экземпляра TradingApp...");
+        let now = chrono::Utc::now().timestamp_millis();
+        let start_time = now - chrono::Duration::days(7).num_milliseconds();
 
-        // Создаем начальный DataWindow
         let mut data_window = DataWindow {
             bars: Vec::new(),
             visible_range: (0.0, 1.0),
             recent_data: Vec::new(),
+            timeframe_remainder: Vec::new(),
             volume_height_ratio: 0.2,
         };
 
-        // Загружаем начальные данные
-        if let Err(e) = Timeframe::get_data_window(db, symbol, start_time, now, 15, &mut data_window) {
+        // Начальная загрузка данных (может заблокировать первый кадр)
+        if let Err(e) = Timeframe::get_data_window(&db, symbol, start_time, now, 15, &mut data_window) {
             eprintln!("Ошибка загрузки начальных данных: {}", e);
         }
 
-        // Возвращаем готовую структуру
+        // Настройка стиля (пример)
+         let mut style = (*cc.egui_ctx.style()).clone();
+         style.visuals.dark_mode = true;
+         cc.egui_ctx.set_style(style);
+
         Self {
-            db: db.clone(), // Создаем новый Arc с новой ссылкой
-            data_window,
-            timeframe: 10,
-            status_messages: vec![format!("Приложение запущено для {}", symbol)],
-            symbol: symbol.to_string(),
-            zoom_sensitivity: 0.01,
-            show_candles: true,
-            crosshair: crosshair::Crosshair::default(),
-        }
-    }
+           db, // Перемещаем Arc<Database>
+           data_window,
+           timeframe: 10,
+           status_messages: vec![format!("Приложение запущено для {}", symbol)],
+           symbol: symbol.to_string(),
+           zoom_sensitivity: 0.01,
+           show_candles: true,
+           crosshair: crosshair::Crosshair::default(),
+           // last_update_time: Instant::now(), // Инициализация таймера
+       }
+   }
+
 
     fn zoom(&mut self, amount: f64) {
         let zoom_factor = self.zoom_sensitivity;
@@ -121,34 +129,27 @@ impl TradingApp {
     }
 }
 
+
 fn main() -> eframe::Result<()> {
-    // Создаем Arc с базой данных
+    println!("Запуск main...");
+    // Создаем Arc с базой данных (Arc для DB все еще может быть полезен,
+    // т.к. сама DB может быть сложной для Clone)
     let db = Arc::new(Database::new("ohlcv_db").expect("Ошибка инициализации БД"));
 
-    // Создаем экземпляр TradingApp с владеемым Arc
-    let app = Arc::new(Mutex::new(TradingApp::new(&db, "BTCUSDT")));
+    // Опции для окна eframe
+    let native_options = gpu_backend::native_options(); // Или NativeOptions::default()
 
-    // Создаем клон для потока
-    let app_clone = app.clone();
-        // Clone the Arc<Database> specifically for the background thread
-        let db_thread_clone = db.clone();
-    // Создаем новый поток
-    thread::spawn(move || {
-        let client = Client::new();
-        let mut app = app_clone.lock().unwrap(); // Блокируем мьютекс
-            if let Err(e) = Timeframe::update_loop(&client, &db_thread_clone, "BTCUSDT", &mut app.data_window) {
-            eprintln!("Ошибка в цикле обновления: {}", e);
-        }
-    });
-
-    // Запускаем приложение
+    // Запускаем приложение eframe
+    println!("Запуск eframe::run_native...");
     eframe::run_native(
-        "BTC/USDT OHLCV",
-        gpu_backend::native_options(),
-        Box::new(move |_| {
-            // Клонируем db для использования в лямбда-функции
-            let db_clone = db.clone();
-            Box::new(TradingApp::new(&db_clone, "BTCUSDT"))
+        "BTC/USDT OHLCV (Однопоточный)",
+        native_options,
+        // Замыкание создает ЕДИНСТВЕННЫЙ экземпляр TradingApp
+        Box::new(move |cc| {
+            println!("Создание экземпляра TradingApp внутри eframe...");
+            // Передаем Arc<Database> в конструктор
+            let app = TradingApp::new(cc, db.clone(), "BTCUSDT");
+            Box::new(app)
         }),
     )
 }

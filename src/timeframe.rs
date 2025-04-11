@@ -46,30 +46,36 @@ impl Timeframe {
         timeframe_minutes: i32,
         data_window: &mut DataWindow,
     ) -> Result<(), Box<dyn Error>> {
-        println!("get_data_window: symbol = {}, start_time = {}, end_time = {}, timeframe = {}", 
-                 symbol, start_time, end_time, timeframe_minutes);
-    
+        println!(
+            "get_data_window: symbol = {}, start_time = {}, end_time = {}, timeframe = {}",
+            symbol, start_time, end_time, timeframe_minutes
+        );
         Self::init_db_if_needed(3, db, symbol, start_time, end_time, data_window)?;
     
         let mut bars = Vec::new();
         let mut current_block_start = Self::get_dbtimestamp(start_time);
     
         while current_block_start <= end_time {
-            println!("Checking block at timestamp: {}", current_block_start);
+            println!("Get block from db, timestamp: {}", current_block_start);
             if let Some(block) = db.get_block(symbol, current_block_start)? {
-                let converted = Self::convert_to_timeframe(block, timeframe_minutes)?;
-                println!("Block at {} has {} bars after conversion", current_block_start, converted.len());
+                let converted = Self::convert_to_timeframe(block, timeframe_minutes, data_window)?;
+                println!(
+                    "Block at {} has {} bars after conversion, remainder.len: {}",
+                    current_block_start,
+                    converted.len(),
+                    data_window.timeframe_remainder.len()
+                );
                 bars.extend(converted);
             } else {
                 println!("No data for block at {}", current_block_start);
             }
             current_block_start += BLOCK_SIZE as i64 * 60_000;
         }
-    
-        // Обновляем bars в существующем data_window
+        println!("Total bars collected: {}", bars.len());
+        println!("bars recent: {}", data_window.recent_data.len());
+        bars.extend(Self::convert_to_timeframe(data_window.recent_data.to_vec(), timeframe_minutes, data_window)?);
         data_window.bars = bars;
-    
-        println!("Total bars collected: {}", data_window.bars.len());
+        println!("Total data_window.bars collected: {}", data_window.bars.len());
         Ok(())
     }
 
@@ -106,7 +112,11 @@ impl Timeframe {
         Ok(())
     }
 
-    fn convert_to_timeframe(klines: Vec<KLine>, timeframe_minutes: i32) -> Result<Vec<crate::Bar>, Box<dyn Error>> {
+    fn convert_to_timeframe(
+        klines: Vec<KLine>,
+        timeframe_minutes: i32,
+        data_window: &mut DataWindow,
+    ) -> Result<Vec<crate::Bar>, Box<dyn Error>> {
         let mut result = Vec::new();
         let mut current_open_time = 0;
         let mut current_open = 0.0;
@@ -114,23 +124,27 @@ impl Timeframe {
         let mut current_low = f64::MAX;
         let mut current_volume = 0.0;
         let mut count = 0;
-
-        for kline in klines {
+    
+        // Объединяем остаток с текущими данными
+        let mut combined_klines = data_window.timeframe_remainder.to_vec();
+        combined_klines.extend(klines);
+    
+        for kline in &combined_klines {
             let price_open = kline.open as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
             let price_high = kline.high as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
             let price_low = kline.low as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
             let price_close = kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
-
+    
             if count == 0 {
                 current_open_time = kline.open_time;
                 current_open = price_open;
             }
-
+    
             current_high = current_high.max(price_high);
             current_low = current_low.min(price_low);
             current_volume += kline.volume;
             count += 1;
-
+    
             if count >= timeframe_minutes as usize {
                 result.push(crate::Bar {
                     time: current_open_time,
@@ -146,7 +160,14 @@ impl Timeframe {
                 current_volume = 0.0;
             }
         }
-
+    
+        // Обновляем остаток в data_window
+        data_window.timeframe_remainder = if count > 0 {
+            combined_klines[combined_klines.len() - count..].to_vec()
+        } else {
+            Vec::new()
+        };
+    
         Ok(result)
     }
 
