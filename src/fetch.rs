@@ -35,7 +35,7 @@ pub fn fetch_klines(
     if let Some(end) = end_time {
         url.push_str(&format!("&endTime={}", end));
     }
-
+    //println!("fetch url: {url}");
     let response = client.get(&url).send()?;
     if !response.status().is_success() {
         return Err(format!("API error: {}", response.status()).into());

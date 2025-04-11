@@ -54,10 +54,10 @@ impl Timeframe {
     ) -> Result<crate::DataWindow, Box<dyn Error>> {
         println!("get_data_window: symbol = {}, start_time = {}, end_time = {}, timeframe = {}", symbol, start_time, end_time, timeframe_minutes);
 
-        Self::init_db_if_needed(db, symbol, start_time, end_time)?;
+        Self::init_db_if_needed(3, db, symbol, start_time, end_time)?;
 
         let mut bars = Vec::new();
-        let mut current_block_start = (start_time / (BLOCK_SIZE as i64 * 60_000)) * BLOCK_SIZE as i64 * 60_000;
+        let mut current_block_start = start_time + start_time % (BLOCK_SIZE as i64 * 60_000);
 
         while current_block_start <= end_time {
             println!("Checking block at timestamp: {}", current_block_start);
@@ -79,6 +79,7 @@ impl Timeframe {
     }
 
     fn init_db_if_needed(
+        pause_between_requests: u64,
         db: &Database,
         symbol: &str,
         start_time: i64,
@@ -88,19 +89,23 @@ impl Timeframe {
         if last_timestamp == 0 {
             println!("No data found for {}, initializing with 7 days of data", symbol);
             let client = Client::new();
-            let mut current_time = start_time;
+            let mut current_time = start_time  + start_time % (BLOCK_SIZE as i64 * 60_000);
             while current_time < end_time {
+                if current_time != start_time {
+                    thread::sleep(std::time::Duration::from_secs(pause_between_requests));
+                }
                 let klines = crate::fetch::fetch_klines(
                     &client,
                     symbol,
                     "1m",
                     1000,
                     Some(current_time),
-                    Some((current_time + 60_000_000 - 60_000).min(end_time)),
+                    Some((current_time + 60_000_000)),
                 )?;
                 Self::process_data_chunk(symbol, klines, db)?;
                 println!("Initialized data for {} from {}", symbol, current_time);
                 current_time += 60_000_000;
+
             }
         }
         Ok(())
