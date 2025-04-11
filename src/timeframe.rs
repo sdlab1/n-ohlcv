@@ -1,11 +1,9 @@
 use crate::db::Database;
 use crate::fetch::{KLine, PRICE_MULTIPLIER};
+use crate::DataWindow;
 use chrono::{Duration, Utc};
-use lazy_static::lazy_static;
 use reqwest::blocking::Client;
-use std::collections::BTreeMap;
 use std::error::Error;
-use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
 
@@ -13,24 +11,19 @@ const BLOCK_SIZE: usize = 1000;
 const UPDATE_INTERVAL: u64 = 300;
 const MAX_RETRIES: u32 = 3;
 
-lazy_static! {
-    static ref MEMORY_CACHE: Arc<Mutex<BTreeMap<(String, i64), Vec<KLine>>>> = 
-        Arc::new(Mutex::new(BTreeMap::new()));
-}
-
 pub struct Timeframe;
 
 impl Timeframe {
-    pub fn update_loop(client: &Client, db: &Database, symbol: &str) -> Result<(), Box<dyn Error>> {
+    pub fn update_loop(client: &Client, db: &Database, symbol: &str, data_window: &mut DataWindow) -> Result<(), Box<dyn Error>> {
         let mut timer = time::Instant::now();
         let mut retry_count = 0;
-
+    
         loop {
             if timer.elapsed().as_secs() >= UPDATE_INTERVAL {
                 match Self::fetch_with_retry(client, symbol, MAX_RETRIES) {
                     Ok(data) => {
                         retry_count = 0;
-                        Self::process_data_chunk(symbol, data, db)?;
+                        Self::process_data_chunk(symbol, data, db, data_window)?;
                     },
                     Err(e) => {
                         retry_count += 1;
@@ -51,14 +44,16 @@ impl Timeframe {
         start_time: i64,
         end_time: i64,
         timeframe_minutes: i32,
-    ) -> Result<crate::DataWindow, Box<dyn Error>> {
-        println!("get_data_window: symbol = {}, start_time = {}, end_time = {}, timeframe = {}", symbol, start_time, end_time, timeframe_minutes);
-
-        Self::init_db_if_needed(3, db, symbol, start_time, end_time)?;
-
+        data_window: &mut DataWindow,
+    ) -> Result<(), Box<dyn Error>> {
+        println!("get_data_window: symbol = {}, start_time = {}, end_time = {}, timeframe = {}", 
+                 symbol, start_time, end_time, timeframe_minutes);
+    
+        Self::init_db_if_needed(3, db, symbol, start_time, end_time, data_window)?;
+    
         let mut bars = Vec::new();
-        let mut current_block_start = start_time + start_time % (BLOCK_SIZE as i64 * 60_000);
-
+        let mut current_block_start = Self::get_dbtimestamp(start_time);
+    
         while current_block_start <= end_time {
             println!("Checking block at timestamp: {}", current_block_start);
             if let Some(block) = db.get_block(symbol, current_block_start)? {
@@ -70,12 +65,12 @@ impl Timeframe {
             }
             current_block_start += BLOCK_SIZE as i64 * 60_000;
         }
-        println!("Total bars collected: {}", bars.len());
-        Ok(crate::DataWindow {
-            bars,
-            visible_range: (0.0, 1.0),
-            volume_height_ratio: 0.2,
-        })
+    
+        // Обновляем bars в существующем data_window
+        data_window.bars = bars;
+    
+        println!("Total bars collected: {}", data_window.bars.len());
+        Ok(())
     }
 
     fn init_db_if_needed(
@@ -84,12 +79,13 @@ impl Timeframe {
         symbol: &str,
         start_time: i64,
         end_time: i64,
+        data_window: &mut DataWindow,
     ) -> Result<(), Box<dyn Error>> {
         let last_timestamp = db.get_last_timestamp(symbol).unwrap_or(0);
         if last_timestamp == 0 {
             println!("No data found for {}, initializing with 7 days of data", symbol);
             let client = Client::new();
-            let mut current_time = start_time  + start_time % (BLOCK_SIZE as i64 * 60_000);
+            let mut current_time = Self::get_dbtimestamp(start_time);
             while current_time < end_time {
                 if current_time != start_time {
                     thread::sleep(std::time::Duration::from_secs(pause_between_requests));
@@ -100,12 +96,11 @@ impl Timeframe {
                     "1m",
                     1000,
                     Some(current_time),
-                    Some((current_time + 60_000_000)),
+                    Some(current_time + 60_000_000),
                 )?;
-                Self::process_data_chunk(symbol, klines, db)?;
+                Self::process_data_chunk(symbol, klines, db, data_window)?;
                 println!("Initialized data for {} from {}", symbol, current_time);
                 current_time += 60_000_000;
-
             }
         }
         Ok(())
@@ -155,6 +150,10 @@ impl Timeframe {
         Ok(result)
     }
 
+    fn get_dbtimestamp(timestamp_ms: i64) -> i64 {
+        timestamp_ms - timestamp_ms % (BLOCK_SIZE as i64 * 60_000)
+    }
+
     fn fetch_with_retry(client: &Client, symbol: &str, max_retries: u32) -> Result<Vec<KLine>, Box<dyn Error>> {
         for attempt in 0..max_retries {
             match Self::fetch_data_chunk(client, symbol) {
@@ -178,9 +177,19 @@ impl Timeframe {
         )
     }
 
-    fn process_data_chunk(symbol: &str, data: Vec<KLine>, db: &Database) -> Result<(), Box<dyn Error>> {
-        let mut cache = MEMORY_CACHE.lock().unwrap();
-
+    fn process_data_chunk(
+        symbol: &str,
+        data: Vec<KLine>,
+        db: &Database,
+        dw: &mut DataWindow,
+    ) -> Result<(), Box<dyn Error>> {
+        if data.len() < 1000 {
+            dw.recent_data = data;
+            return Err(format!(
+                "DataWindow.recent_data len {}",
+                dw.recent_data.len()
+            ).into());
+        }
         for i in 1..data.len() {
             let time_diff = data[i].open_time - data[i-1].open_time;
             if time_diff != 60_000 {
@@ -193,23 +202,7 @@ impl Timeframe {
                 ).into());
             }
         }
-
-        for kline in data {
-            let block_start = (kline.open_time / 60_000 / BLOCK_SIZE as i64) * BLOCK_SIZE as i64 * 60_000;
-            let cache_key = (symbol.to_string(), block_start);
-
-            cache.entry(cache_key.clone())
-                .and_modify(|v| v.push(kline.clone()))
-                .or_insert_with(|| vec![kline.clone()]);
-        }
-
-        for (cache_key, block) in cache.iter() {
-            if !block.is_empty() {
-                println!("Saving block for {} at {} with {} items", symbol, cache_key.1, block.len());
-                db.insert_block(symbol, cache_key.1, block)?;
-            }
-        }
-        cache.clear();
+        db.insert_block(symbol, data[0].open_time, &data);
         Ok(())
     }
 }

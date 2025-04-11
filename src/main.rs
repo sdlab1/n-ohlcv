@@ -1,9 +1,10 @@
-// main.rs
+use crate::db::Database;
+use crate::fetch::KLine;
 use reqwest::blocking::Client;
 use timeframe::Timeframe;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
-use chrono;
+use chrono::{Duration, Utc};
 
 mod axes;
 mod hlcbars;
@@ -31,6 +32,7 @@ struct TradingApp {
 pub struct DataWindow {
     bars: Vec<Bar>,
     visible_range: (f64, f64),
+    recent_data: Vec<KLine>,
     volume_height_ratio: f32,
 }
 
@@ -45,27 +47,29 @@ pub struct Bar {
 }
 
 impl TradingApp {
-    fn new(db: Arc<db::Database>, symbol: &str) -> Self {
-        let now = chrono::Utc::now().timestamp_millis();
-        let start_time = now - chrono::Duration::days(7).num_milliseconds();
+    fn new(db: &Arc<Database>, symbol: &str) -> Self {
+        let now = Utc::now().timestamp_millis();
+        let start_time = now - Duration::days(7).num_milliseconds();
 
-        let data_window = match Timeframe::get_data_window(&db, symbol, start_time, now, 15) {
-            Ok(data_window) => data_window,
-            Err(e) => {
-                eprintln!("Initial data load failed: {}", e);
-                DataWindow {
-                    bars: Vec::new(),
-                    visible_range: (0.0, 1.0),
-                    volume_height_ratio: 0.2,
-                }
-            }
+        // Создаем начальный DataWindow
+        let mut data_window = DataWindow {
+            bars: Vec::new(),
+            visible_range: (0.0, 1.0),
+            recent_data: Vec::new(),
+            volume_height_ratio: 0.2,
         };
 
+        // Загружаем начальные данные
+        if let Err(e) = Timeframe::get_data_window(db, symbol, start_time, now, 15, &mut data_window) {
+            eprintln!("Ошибка загрузки начальных данных: {}", e);
+        }
+
+        // Возвращаем готовую структуру
         Self {
-            db,
+            db: db.clone(), // Создаем новый Arc с новой ссылкой
             data_window,
             timeframe: 10,
-            status_messages: vec![format!("Application started for {}", symbol)],
+            status_messages: vec![format!("Приложение запущено для {}", symbol)],
             symbol: symbol.to_string(),
             zoom_sensitivity: 0.01,
             show_candles: true,
@@ -91,41 +95,60 @@ impl TradingApp {
         //self.data_window.visible_range = (new_start, new_end);
     }
 
+    fn update_data_window(&mut self) {
+        let now = Utc::now().timestamp_millis();
+        let start_time = now - Duration::days(7).num_milliseconds();
+
+        if let Err(e) = Timeframe::get_data_window(
+            &self.db,
+            &self.symbol,
+            start_time,
+            now,
+            self.timeframe,
+            &mut self.data_window,
+        ) {
+            self.log_status(format!("Ошибка обновления данных: {}", e));
+        } else {
+            self.log_status(format!("Обновлено отображение: {} баров", self.data_window.bars.len()));
+        }
+    }
+
     fn log_status(&mut self, message: String) {
         self.status_messages.push(message);
         if self.status_messages.len() > 100 {
             self.status_messages.remove(0);
         }
     }
-
-    fn update_data_window(&mut self) {
-        let now = chrono::Utc::now().timestamp_millis();
-        let start_time = now - chrono::Duration::days(7).num_milliseconds();
-        
-        match Timeframe::get_data_window(&self.db, &self.symbol, start_time, now, self.timeframe) {
-            Ok(data_window) => {
-                self.data_window = data_window;
-                self.log_status(format!("Updated view with {} bars", self.data_window.bars.len()));
-            },
-            Err(e) => {
-                self.log_status(format!("Error updating data: {}", e));
-            }
-        }
-    }
 }
 
 fn main() -> eframe::Result<()> {
-    let db = Arc::new(db::Database::new("ohlcv_db").expect("DB init failed"));
-    let db_clone = db.clone();
+    // Создаем Arc с базой данных
+    let db = Arc::new(Database::new("ohlcv_db").expect("Ошибка инициализации БД"));
 
+    // Создаем экземпляр TradingApp с владеемым Arc
+    let app = Arc::new(Mutex::new(TradingApp::new(&db, "BTCUSDT")));
+
+    // Создаем клон для потока
+    let app_clone = app.clone();
+        // Clone the Arc<Database> specifically for the background thread
+        let db_thread_clone = db.clone();
+    // Создаем новый поток
     thread::spawn(move || {
         let client = Client::new();
-        timeframe::Timeframe::update_loop(&client, &db_clone, "BTCUSDT");
+        let mut app = app_clone.lock().unwrap(); // Блокируем мьютекс
+            if let Err(e) = Timeframe::update_loop(&client, &db_thread_clone, "BTCUSDT", &mut app.data_window) {
+            eprintln!("Ошибка в цикле обновления: {}", e);
+        }
     });
 
+    // Запускаем приложение
     eframe::run_native(
         "BTC/USDT OHLCV",
         gpu_backend::native_options(),
-        Box::new(|_| Box::new(TradingApp::new(db, "BTCUSDT"))),
+        Box::new(move |_| {
+            // Клонируем db для использования в лямбда-функции
+            let db_clone = db.clone();
+            Box::new(TradingApp::new(&db_clone, "BTCUSDT"))
+        }),
     )
 }
