@@ -1,6 +1,7 @@
 // app_ui.rs
 use eframe::{Frame, egui};
-use crate::{TradingApp, axes, hlcbars, volbars, crosshair};
+use crate::{TradingApp, axes, hlcbars, volbars};
+use crate::settings::*;
 
 impl eframe::App for TradingApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
@@ -50,7 +51,8 @@ impl eframe::App for TradingApp {
                     egui::Sense::drag() // Только для перемещения
                 );
 
-                let rect = response.rect.shrink(2.0); // Небольшой отступ от краев
+                let mut rect = response.rect.shrink(CHART_MARGIN); // Отступы по всем сторонам
+                rect.set_height(rect.height() - CHART_BOTTOM_MARGIN); // Уменьшаем высоту для отступа снизу
 
                 // Рисуем компоненты графика
                 axes::draw(ui, rect, &self.data_window);
@@ -68,8 +70,28 @@ impl eframe::App for TradingApp {
 
 
                 if response.dragged() && response.drag_delta().x != 0.0 {
-
+                    let delta_x = response.drag_delta().x;
+                    let bars_len = self.data_window.bars.len() as i64;
+                    let (start_idx, end_idx) = self.data_window.visible_range;
+                    let visible_count = end_idx - start_idx;
+                
+                    // Учитываем масштаб графика
+                    let bars_per_pixel = visible_count as f32 / rect.width();
+                    let sensitivity = DRAG_SENSITIVITY * 2.0; // Увеличиваем чувствительность
+                    let shift = (delta_x * bars_per_pixel * sensitivity as f32).round() as i64;
+                
+                    let new_start = (start_idx - shift).clamp(0, bars_len.saturating_sub(visible_count));
+                    let new_end = (new_start + visible_count).min(bars_len);
+                
+                    println!(
+                        "Drag: delta_x = {}, bars_per_pixel = {}, sensitivity = {}, shift = {}, old_range = ({}, {}), new_range = ({}, {}), bars_len = {}",
+                        delta_x, bars_per_pixel, sensitivity, shift, start_idx, end_idx, new_start, new_end, bars_len
+                    );
+                
+                    self.data_window.visible_range = (new_start, new_end);
+                    ctx.request_repaint();
                 }
+                
 
                 let scroll_delta = ctx.input(|i| i.raw_scroll_delta.y);
                 if scroll_delta != 0.0 {

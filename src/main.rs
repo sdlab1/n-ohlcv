@@ -1,11 +1,12 @@
+//main.rs
 use crate::db::Database;
 use crate::fetch::KLine;
-use reqwest::blocking::Client;
 use timeframe::Timeframe;
-use std::sync::{Arc, Mutex};
-use std::thread;
+use std::sync::Arc;
 use chrono::{Duration, Utc};
+use settings::*;
 
+pub mod settings;
 mod axes;
 mod hlcbars;
 mod volbars;
@@ -23,7 +24,6 @@ struct TradingApp {
     timeframe: i32,
     status_messages: Vec<String>,
     symbol: String,
-    zoom_sensitivity: f64,
     show_candles: bool,
     crosshair: crosshair::Crosshair,
 }
@@ -31,7 +31,7 @@ struct TradingApp {
 #[derive(Debug)]
 pub struct DataWindow {
     bars: Vec<Bar>,
-    visible_range: (f64, f64),
+    visible_range: (i64, i64), // Индексы первого и последнего отображаемого бара
     recent_data: Vec<KLine>,
     timeframe_remainder: Vec<KLine>,
     volume_height_ratio: f32,
@@ -55,7 +55,7 @@ impl TradingApp {
 
         let mut data_window = DataWindow {
             bars: Vec::new(),
-            visible_range: (0.0, 1.0),
+            visible_range: (0, 0),
             recent_data: Vec::new(),
             timeframe_remainder: Vec::new(),
             volume_height_ratio: 0.2,
@@ -77,7 +77,6 @@ impl TradingApp {
            timeframe: 10,
            status_messages: vec![format!("Приложение запущено для {}", symbol)],
            symbol: symbol.to_string(),
-           zoom_sensitivity: 0.01,
            show_candles: true,
            crosshair: crosshair::Crosshair::default(),
            // last_update_time: Instant::now(), // Инициализация таймера
@@ -85,23 +84,38 @@ impl TradingApp {
    }
 
 
-    fn zoom(&mut self, amount: f64) {
-        let zoom_factor = self.zoom_sensitivity;
-        let (current_start, current_end) = self.data_window.visible_range;
-        let range_width = current_end - current_start;
-        
-        let new_width = if amount > 0.0 {
-            range_width * (1.0 - zoom_factor).max(0.01)
-        } else {
-            range_width * (1.0 + zoom_factor).max(0.01)
-        };
-        
-        let center = (current_start + current_end) / 2.0;
-        let new_start = (center - new_width / 2.0).max(0.0);
-        let new_end = (new_start + new_width).min(1.0);
-        
-        //self.data_window.visible_range = (new_start, new_end);
+   fn zoom(&mut self, amount: f64) {
+    let (mut start_idx, mut end_idx) = self.data_window.visible_range;
+    let len = self.data_window.bars.len() as i64;
+    if len == 0 || end_idx <= start_idx {
+        return;
     }
+
+    let range = end_idx - start_idx;
+    let zoom = (range as f64 * ZOOM_SENSITIVITY).max(1.0) as i64; // Минимум 1 бар
+
+    if amount > 0.0 {
+        // Zoom in
+        start_idx = (start_idx + zoom).min(end_idx - 2);
+        end_idx = (end_idx - zoom).max(start_idx + 2).min(len);
+    } else {
+        // Zoom out
+        start_idx = (start_idx - zoom).max(0);
+        end_idx = (end_idx + zoom).min(len);
+    }
+
+    // Финальная проверка
+    start_idx = start_idx.max(0);
+    end_idx = end_idx.min(len).max(start_idx + 2); // Минимум 2 бара
+
+    println!(
+        "Zoom: amount = {}, zoom_step = {}, old_range = ({}, {}), new_range = ({}, {}), bars_len = {}",
+        amount, zoom, self.data_window.visible_range.0, self.data_window.visible_range.1, start_idx, end_idx, len
+    );
+
+    self.data_window.visible_range = (start_idx, end_idx);
+}
+
 
     fn update_data_window(&mut self) {
         let now = Utc::now().timestamp_millis();
