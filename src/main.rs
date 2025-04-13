@@ -108,10 +108,10 @@ impl TradingApp {
     start_idx = start_idx.max(0);
     end_idx = end_idx.min(len).max(start_idx + 2); // Минимум 2 бара
 
-    println!(
+    /*println!(
         "Zoom: amount = {}, zoom_step = {}, old_range = ({}, {}), new_range = ({}, {}), bars_len = {}",
         amount, zoom, self.data_window.visible_range.0, self.data_window.visible_range.1, start_idx, end_idx, len
-    );
+    );*/
 
     self.data_window.visible_range = (start_idx, end_idx);
 }

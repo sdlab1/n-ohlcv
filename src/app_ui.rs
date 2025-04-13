@@ -57,11 +57,11 @@ impl eframe::App for TradingApp {
                 let mut rect = response.rect.shrink(CHART_MARGIN); // Отступы по всем сторонам
                 rect.set_height(rect.height() - CHART_BOTTOM_MARGIN); // Уменьшаем высоту для отступа снизу
 
-                static mut UPDATE_COUNT: u32 = 0;
+                /*static mut UPDATE_COUNT: u32 = 0;
                 unsafe {
                     UPDATE_COUNT += 1;
                     println!("Update call: {}", UPDATE_COUNT);
-                }
+                }*/
                 // Рисуем компоненты графика
                 axes::draw(ui, rect, &self.data_window);
                 hlcbars::draw(ui, rect, &self.data_window, self.show_candles);
@@ -91,10 +91,10 @@ impl eframe::App for TradingApp {
                     let new_start = (start_idx - shift).clamp(0, bars_len.saturating_sub(visible_count));
                     let new_end = (new_start + visible_count).min(bars_len);
                 
-                    println!(
+                    /*println!(
                         "Drag: delta_x = {}, bars_per_pixel = {}, sensitivity = {}, shift = {}, old_range = ({}, {}), new_range = ({}, {}), bars_len = {}",
                         delta_x, bars_per_pixel, sensitivity, shift, start_idx, end_idx, new_start, new_end, bars_len
-                    );
+                    );*/
                 
                     self.data_window.visible_range = (new_start, new_end);
                     ctx.request_repaint();
