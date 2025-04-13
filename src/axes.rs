@@ -241,114 +241,109 @@
             );
          }
      }
- 
- 
-     // --- Time Axis (X-axis) ---
-      let time_span_ms = visible_slice
-          .last()
-          .map(|bar| bar.time)
-          .unwrap_or(0)
-          - visible_slice
-          .first()
-          .map(|bar| bar.time)
-          .unwrap_or(0);
- 
-      if time_span_ms <= 0 {
-          return;
-      }
- 
-      let avg_label_width = 40.0;
-      let min_pixel_gap = 60.0;
-      let max_labels = (rect.width() / (avg_label_width + min_pixel_gap)).floor().max(1.0) as usize;
-      let target_lines = max_labels.clamp(4, 10);
- 
-      let min_interval_ms = if target_lines > 0 { (time_span_ms as f64 / target_lines as f64) as i64 } else { time_span_ms };
-      let min_interval_ms = min_interval_ms.max(1000);
- 
- 
-      let intervals = [
-          1_000, 60_000, 300_000, 900_000, 1_800_000, 3_600_000, 14_400_000,
-          43_200_000, 86_400_000, 604_800_000, 2_592_000_000, 31_536_000_000,
-      ];
- 
-      let mut time_interval_ms = intervals
-          .iter()
-          .find(|&&interval| interval >= min_interval_ms)
-          .copied()
-          .unwrap_or(intervals[intervals.len() - 1]);
- 
-      if time_interval_ms > 0 && time_span_ms / time_interval_ms > (target_lines * 2) as i64 {
-           time_interval_ms = intervals
-              .iter()
-              .find(|&&interval| interval >= time_span_ms / (target_lines * 2).max(1) as i64)
-              .copied()
-              .unwrap_or(intervals[intervals.len() - 1]);
-      }
- 
-      let first_time = visible_slice.first().map(|bar| bar.time).unwrap_or(0);
-      // Исправлено: unwrap_or_else требует замыкание без аргументов
-      let first_dt = DateTime::<Utc>::from_timestamp_millis(first_time).unwrap_or_else(|| Utc::now());
- 
-      let first_time_rounded = first_time - first_time % time_interval_ms.max(1);
- 
-      // Исправлено: unwrap_or_else требует замыкание без аргументов
-      let last_dt = DateTime::<Utc>::from_timestamp_millis(first_time + time_span_ms).unwrap_or_else(|| Utc::now());
-      let has_two_years = first_dt.year() != last_dt.year();
-      let has_two_months = first_dt.month() != last_dt.month() || first_dt.year() != last_dt.year();
-      let has_two_days = first_dt.ordinal() != last_dt.ordinal() || first_dt.year() != last_dt.year();
- 
- 
-      let mut labels: Vec<(i64, usize, f32)> = vec![];
-      let left_margin = 5.0;
-      let right_margin = 5.0;
- 
-      let max_iterations = (time_span_ms / time_interval_ms.max(1) + 20).min(2000);
-      let mut current_time_check = first_time_rounded;
-      for _ in 0..max_iterations {
-          if current_time_check > first_time + time_span_ms + time_interval_ms {
-               break;
-          }
-           if let Some((bar_idx, _)) = data_window
-              .bars
-              .iter()
-              .enumerate()
-              .skip(start as usize)
-              .find(|(_, bar)| bar.time >= current_time_check)
-          {
-               if bar_idx >= end as usize {
-                  if let Some(last_bar) = visible_slice.last() {
-                       let visible_bar_count = (end - start).max(1) as f64;
-                       let last_bar_idx_abs = start + visible_slice.len() as i64 -1;
-                       if last_bar_idx_abs >= start { // Проверка что индекс валидный
-                          let normalized_pos = (last_bar_idx_abs as f64 - start as f64) / visible_bar_count;
-                          let x_right = rect.left() + (normalized_pos as f32) * rect.width();
-                          if labels.last().map_or(true, |l| (x_right - l.2).abs() >= min_pixel_gap * 0.8) {
-                              labels.push((last_bar.time, last_bar_idx_abs as usize, x_right));
-                          }
-                       }
-                  }
-                  break;
-               }
- 
-              let visible_bar_count = (end - start).max(1) as f64;
-              // Используем bar_idx напрямую, т.к. он уже абсолютный индекс в data_window.bars
-              let normalized_pos = (bar_idx as f64 - start as f64) / visible_bar_count;
-              let x_right = rect.left() + (normalized_pos as f32) * rect.width();
- 
- 
-               if x_right >= rect.left() + left_margin && x_right <= rect.right() - right_margin {
-                  if labels.last().map_or(true, |last_label| (x_right - last_label.2).abs() >= min_pixel_gap * 0.8) {
-                      labels.push((current_time_check, bar_idx, x_right));
-                  }
-              } else if bar_idx as i64 > start && x_right > rect.right() - right_margin {
-                   break;
-              }
-          } else if current_time_check > first_time {
-               break;
-          }
-          if time_interval_ms <= 0 { break; }
-          current_time_check += time_interval_ms;
-      }
+
+// --- Time Axis (X-axis) ---
+let time_span_ms = visible_slice
+    .last()
+    .map(|bar| bar.time)
+    .unwrap_or(0)
+    - visible_slice
+    .first()
+    .map(|bar| bar.time)
+    .unwrap_or(0);
+
+if time_span_ms <= 0 {
+    return;
+}
+
+let avg_label_width = 40.0;
+let min_pixel_gap = 60.0;
+let max_labels = (rect.width() / (avg_label_width + min_pixel_gap)).floor().max(1.0) as usize;
+let target_lines = max_labels.clamp(4, 10);
+
+let min_interval_ms = if target_lines > 0 { (time_span_ms as f64 / target_lines as f64) as i64 } else { time_span_ms };
+let min_interval_ms = min_interval_ms.max(1000);
+
+let intervals = [
+    1_000, 60_000, 300_000, 900_000, 1_800_000, 3_600_000, 14_400_000,
+    43_200_000, 86_400_000, 604_800_000, 2_592_000_000, 31_536_000_000,
+];
+
+let mut time_interval_ms = intervals
+    .iter()
+    .find(|&&interval| interval >= min_interval_ms)
+    .copied()
+    .unwrap_or(intervals[intervals.len() - 1]);
+
+if time_interval_ms > 0 && time_span_ms / time_interval_ms > (target_lines * 2) as i64 {
+    time_interval_ms = intervals
+        .iter()
+        .find(|&&interval| interval >= time_span_ms / (target_lines * 2).max(1) as i64)
+        .copied()
+        .unwrap_or(intervals[intervals.len() - 1]);
+}
+
+let first_time = visible_slice.first().map(|bar| bar.time).unwrap_or(0);
+let first_dt = DateTime::<Utc>::from_timestamp_millis(first_time).unwrap_or_else(|| Utc::now());
+
+let first_time_rounded = first_time - first_time % time_interval_ms.max(1);
+
+let last_dt = DateTime::<Utc>::from_timestamp_millis(first_time + time_span_ms).unwrap_or_else(|| Utc::now());
+let has_two_years = first_dt.year() != last_dt.year();
+let has_two_months = first_dt.month() != last_dt.month() || first_dt.year() != last_dt.year();
+let has_two_days = first_dt.ordinal() != last_dt.ordinal() || first_dt.year() != last_dt.year();
+
+let mut labels: Vec<(i64, usize, f32)> = vec![];
+let left_margin = 5.0;
+let right_margin = 5.0;
+
+let max_iterations = (time_span_ms / time_interval_ms.max(1) + 20).min(2000);
+let mut current_time_check = first_time_rounded;
+for _ in 0..max_iterations {
+    if current_time_check > first_time + time_span_ms + time_interval_ms {
+        break;
+    }
+    if let Some((bar_idx, _)) = data_window
+        .bars
+        .iter()
+        .enumerate()
+        .skip(start as usize)
+        .find(|(_, bar)| bar.time >= current_time_check)
+    {
+        if bar_idx >= end as usize {
+            if let Some(last_bar) = visible_slice.last() {
+                let visible_bar_count = (end - start).max(1) as f64;
+                let last_bar_idx_abs = start + visible_slice.len() as i64 - 1;
+                if last_bar_idx_abs >= start {
+                    let normalized_pos = (last_bar_idx_abs as f64 - start as f64) / visible_bar_count;
+                    let x_right = rect.left() + (normalized_pos as f32) * rect.width() + data_window.pixel_offset; // Исправлено
+                    if labels.last().map_or(true, |l| (x_right - l.2).abs() >= min_pixel_gap * 0.8) {
+                        labels.push((last_bar.time, last_bar_idx_abs as usize, x_right));
+                    }
+                }
+            }
+            break;
+        }
+
+        let visible_bar_count = (end - start).max(1) as f64;
+        let normalized_pos = (bar_idx as f64 - start as f64) / visible_bar_count;
+        let x_right = rect.left() + (normalized_pos as f32) * rect.width() + data_window.pixel_offset; // Исправлено
+
+        if x_right >= rect.left() + left_margin && x_right <= rect.right() - right_margin {
+            if labels.last().map_or(true, |last_label| (x_right - last_label.2).abs() >= min_pixel_gap * 0.8) {
+                labels.push((current_time_check, bar_idx, x_right));
+            }
+        } else if bar_idx as i64 > start && x_right > rect.right() - right_margin {
+            break;
+        }
+    } else if current_time_check > first_time {
+        break;
+    }
+    if time_interval_ms <= 0 {
+        break;
+    }
+    current_time_check += time_interval_ms;
+}
  
  
       // Рисуем метки времени
