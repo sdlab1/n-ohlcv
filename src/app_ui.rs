@@ -7,42 +7,39 @@ use crate::settings::*;
 impl eframe::App for TradingApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            // --- ЕДИНЫЙ ГОРИЗОНТАЛЬНЫЙ РЯД: Инфо + Кнопки ---
+            ui.horizontal(|ui| {
             //LIMITS RENDER
             //ctx.request_repaint_after(std::time::Duration::from_millis(1000));
-            // Сначала отображаем информацию о текущем баре (если есть)
-            if let Some(pos) = ctx.pointer_hover_pos() {
-                if let Some(bar_info) = self.crosshair.get_bar_info(pos, &self.data_window) {
-                    ui.horizontal(|ui| {
-                        ui.label(bar_info);
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(format!("{} OHLCV Viewer", self.symbol));
-                        });
-                    });
-                } else {
-                    ui.heading(format!("{} OHLCV Viewer", self.symbol));
-                }
-            } else {
-                ui.heading(format!("{} OHLCV Viewer", self.symbol));
-            }
             ui.horizontal(|ui| {
                 if ui.button(if self.show_candles { "bars" } else { "candles" }).clicked() {
                     self.show_candles = !self.show_candles;
                 }
                 
                 for &tf in &[5, 15, 60, 240] {
-                    if ui.button(format!("{}m", tf)).clicked() {
+                    if ui.button(format!("{}", tf)).clicked() {
                         self.timeframe = tf;
                         self.update_data_window();
                     }
                 }
-            });
-
-            ui.horizontal(|ui| {
                 if ui.button("+").clicked() {
                     self.zoom(0.1); // Zoom in
                 }
                 if ui.button("-").clicked() {
                     self.zoom(-0.1); // Zoom out
+                }
+                });
+                ui.add_space(15.0);    
+                // bar info
+                if let Some(pos) = ctx.pointer_hover_pos() {
+                    if let Some(bar_info) = self.crosshair.get_bar_info(pos, &self.data_window) {
+                        ui.horizontal(|ui| {
+                            ui.label(bar_info);
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.label(format!("{} OHLCV Viewer", self.symbol));
+                            });
+                        });
+                    }
                 }
             });
 
@@ -54,7 +51,8 @@ impl eframe::App for TradingApp {
                     egui::Sense::drag() // Только для перемещения
                 );
 
-                let mut rect = response.rect.shrink(CHART_MARGIN); // Отступы по всем сторонам
+                let mut rect = response.rect;
+                //rect = rect.shrink(CHART_MARGIN); // Отступы по всем сторонам
                 rect.set_height(rect.height() - CHART_BOTTOM_MARGIN); // Уменьшаем высоту для отступа снизу
 
                 /*static mut UPDATE_COUNT: u32 = 0;

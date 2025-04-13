@@ -49,6 +49,14 @@ pub struct Bar {
 
 impl TradingApp {
     fn new(cc: &eframe::CreationContext<'_>, db: Arc<Database>, symbol: &str) -> Self {
+        if let Some(render_state) = cc.wgpu_render_state.as_ref() {
+            let adapter_info = render_state.adapter.get_info();
+            println!("backend: {:?}", adapter_info.backend);
+        } else if let Some(_gl) = cc.gl.as_ref() {
+            println!("eframe is likely using Glow (OpenGL) backend.");
+        }  else {
+            println!("Could not determine the graphics backend used by eframe.");
+        }
         println!("Создание экземпляра TradingApp...");
         let now = chrono::Utc::now().timestamp_millis();
         let start_time = now - chrono::Duration::days(7).num_milliseconds();
