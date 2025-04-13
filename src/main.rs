@@ -35,6 +35,7 @@ pub struct DataWindow {
     recent_data: Vec<KLine>,
     timeframe_remainder: Vec<KLine>,
     volume_height_ratio: f32,
+    pixel_offset: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -48,7 +49,7 @@ pub struct Bar {
 }
 
 impl TradingApp {
-    fn new(cc: &eframe::CreationContext<'_>, db: Arc<Database>, symbol: &str) -> Self {
+    fn new(cc: &eframe::CreationContext<'_>, db: Arc<Database>, symbol: &str, timeframe: i32) -> Self {
         if let Some(render_state) = cc.wgpu_render_state.as_ref() {
             let adapter_info = render_state.adapter.get_info();
             println!("backend: {:?}", adapter_info.backend);
@@ -67,10 +68,11 @@ impl TradingApp {
             recent_data: Vec::new(),
             timeframe_remainder: Vec::new(),
             volume_height_ratio: 0.2,
+            pixel_offset: 0.0,
         };
 
         // Начальная загрузка данных (может заблокировать первый кадр)
-        if let Err(e) = Timeframe::get_data_window(&db, symbol, start_time, now, 15, &mut data_window) {
+        if let Err(e) = Timeframe::get_data_window(&db, symbol, start_time, now, timeframe, &mut data_window) {
             eprintln!("Ошибка загрузки начальных данных: {}", e);
         }
 
@@ -82,7 +84,7 @@ impl TradingApp {
         Self {
            db, // Перемещаем Arc<Database>
            data_window,
-           timeframe: 10,
+           timeframe: timeframe,
            status_messages: vec![format!("Приложение запущено для {}", symbol)],
            symbol: symbol.to_string(),
            show_candles: true,
@@ -115,11 +117,6 @@ impl TradingApp {
     // Финальная проверка
     start_idx = start_idx.max(0);
     end_idx = end_idx.min(len).max(start_idx + 2); // Минимум 2 бара
-
-    /*println!(
-        "Zoom: amount = {}, zoom_step = {}, old_range = ({}, {}), new_range = ({}, {}), bars_len = {}",
-        amount, zoom, self.data_window.visible_range.0, self.data_window.visible_range.1, start_idx, end_idx, len
-    );*/
 
     self.data_window.visible_range = (start_idx, end_idx);
 }
@@ -170,7 +167,7 @@ fn main() -> eframe::Result<()> {
         Box::new(move |cc| {
             println!("Создание экземпляра TradingApp внутри eframe...");
             // Передаем Arc<Database> в конструктор
-            let app = TradingApp::new(cc, db.clone(), "BTCUSDT");
+            let app = TradingApp::new(cc, db.clone(), "BTCUSDT", 15);
             Box::new(app)
         }),
     )

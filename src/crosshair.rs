@@ -18,16 +18,43 @@ impl Crosshair {
 
         let index = ((mouse_pos.x / 10.0) as usize).min(visible_slice.len().saturating_sub(1)); // approximation
         visible_slice.get(index).map(|bar| {
-            let dt = DateTime::<Utc>::from_timestamp_millis(bar.time).unwrap_or(Utc::now());
-            format!("{} | O:{:.2} H:{:.2} L:{:.2} C:{:.2}", dt.format("%H:%M"), bar.open, bar.high, bar.low, bar.close)
-        })
+    let dt = DateTime::<Utc>::from_timestamp_millis(bar.time).unwrap_or(Utc::now());
+    
+// Форматирование bar.volume
+let volume_str = {
+    let volume = bar.volume;
+    let (base, unit) = if volume < 1000.0 {
+        (1.0, "")           // Без единицы измерения
+    } else if volume < 1_000_000.0 {
+        (1000.0, "k")       // Тысячи
+    } else {
+        (1_000_000.0, "m")  // Миллионы
+    };
+    let value = volume / base;
+    let decimals: usize = if value < 10.0 {
+        2                   // Два знака после запятой (например, 1.50k, 5.00)
+    } else if value < 100.0 {
+        1                   // Один знак после запятой (например, 50.0, 12.0k)
+    } else {
+        0                   // Без знаков после запятой (например, 100, 123k)
+    };
+    format!("{:.*}{}", decimals, value, unit) // Исправлено: правильный порядок аргументов
+};
+
+// Итоговое форматирование строки
+format!(
+    "{} | O:{:.2} H:{:.2} L:{:.2} C:{:.2} V:{}",
+    dt.format("%H:%M"),
+    bar.open,
+    bar.high,
+    bar.low,
+    bar.close,
+    volume_str
+)
+})
     }
 
     pub fn draw(&self, ui: &mut egui::Ui, rect: egui::Rect, _data_window: &crate::DataWindow, mouse_pos: egui::Pos2) {
-        if !self.visible || !rect.contains(mouse_pos) {
-            return;
-        }
-
         let painter = ui.painter();
         let color = egui::Color32::from_rgba_unmultiplied(255, 255, 255, 100);
 

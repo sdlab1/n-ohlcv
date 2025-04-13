@@ -1,16 +1,12 @@
 // app_ui.rs
 use eframe::{Frame, egui};
 use crate::{TradingApp, axes, hlcbars, volbars};
-use crate::settings::*;
-
+use crate::settings;
 
 impl eframe::App for TradingApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            // --- ЕДИНЫЙ ГОРИЗОНТАЛЬНЫЙ РЯД: Инфо + Кнопки ---
             ui.horizontal(|ui| {
-            //LIMITS RENDER
-            //ctx.request_repaint_after(std::time::Duration::from_millis(1000));
             ui.horizontal(|ui| {
                 if ui.button(if self.show_candles { "bars" } else { "candles" }).clicked() {
                     self.show_candles = !self.show_candles;
@@ -36,7 +32,7 @@ impl eframe::App for TradingApp {
                         ui.horizontal(|ui| {
                             ui.label(bar_info);
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                ui.label(format!("{} OHLCV Viewer", self.symbol));
+                                ui.label(format!("{} {}m", self.symbol, self.timeframe));
                             });
                         });
                     }
@@ -52,50 +48,51 @@ impl eframe::App for TradingApp {
                 );
 
                 let mut rect = response.rect;
-                //rect = rect.shrink(CHART_MARGIN); // Отступы по всем сторонам
-                rect.set_height(rect.height() - CHART_BOTTOM_MARGIN); // Уменьшаем высоту для отступа снизу
+                rect.set_height(rect.height() - settings::CHART_BOTTOM_MARGIN); // Уменьшаем высоту для отступа снизу
 
-                /*static mut UPDATE_COUNT: u32 = 0;
-                unsafe {
-                    UPDATE_COUNT += 1;
-                    println!("Update call: {}", UPDATE_COUNT);
-                }*/
                 // Рисуем компоненты графика
-                axes::draw(ui, rect, &self.data_window);
                 hlcbars::draw(ui, rect, &self.data_window, self.show_candles);
                 volbars::draw(ui, rect, &self.data_window);
+                axes::draw(ui, rect, &self.data_window);
 
                 // Перекрестие - работает при любом hover, даже без Sense::hover()
-                if self.crosshair.visible {
                     if let Some(pos) = ctx.pointer_hover_pos() {
                         if rect.contains(pos) {
+                            //self.crosshair.visible = true;
                             self.crosshair.draw(ui, rect, &self.data_window, pos);
                         }
                     }
-                }
-
-
                 if response.dragged() && response.drag_delta().x != 0.0 {
                     let delta_x = response.drag_delta().x;
                     let bars_len = self.data_window.bars.len() as i64;
                     let (start_idx, end_idx) = self.data_window.visible_range;
                     let visible_count = end_idx - start_idx;
-                
-                    // Учитываем масштаб графика
-                    let bars_per_pixel = visible_count as f32 / rect.width();
-                    let sensitivity = DRAG_SENSITIVITY * 2.0; // Увеличиваем чувствительность
-                    let shift = (delta_x * bars_per_pixel * sensitivity as f32).round() as i64;
-                
-                    let new_start = (start_idx - shift).clamp(0, bars_len.saturating_sub(visible_count));
-                    let new_end = (new_start + visible_count).min(bars_len);
-                
-                    /*println!(
-                        "Drag: delta_x = {}, bars_per_pixel = {}, sensitivity = {}, shift = {}, old_range = ({}, {}), new_range = ({}, {}), bars_len = {}",
-                        delta_x, bars_per_pixel, sensitivity, shift, start_idx, end_idx, new_start, new_end, bars_len
-                    );*/
-                
-                    self.data_window.visible_range = (new_start, new_end);
-                    ctx.request_repaint();
+                    
+
+                    // Проверяем, находимся ли мы у правого края и тянем влево
+                    let at_right_edge = end_idx >= bars_len;
+                    let dragging_left = delta_x < 0.0;
+                    
+                    if !(at_right_edge && dragging_left) {
+                        // Обновляем смещение в пикселях
+                        self.data_window.pixel_offset += delta_x;
+                        
+                        // Вычисляем сколько баров соответствует текущему смещению
+                        let bar_width = (rect.width() / visible_count as f32) - settings::BAR_SPACING;
+                        let bars_offset = (self.data_window.pixel_offset / (bar_width + settings::BAR_SPACING)).round() as i64;
+                        
+                        // Если смещение превысило ширину бара, обновляем visible_range
+                        if bars_offset.abs() >= 1 {
+                            let shift = bars_offset;
+                            let new_start = (start_idx - shift).clamp(0, bars_len.saturating_sub(visible_count));
+                            let new_end = (new_start + visible_count).min(bars_len);
+                            
+                            self.data_window.visible_range = (new_start, new_end);
+                            self.data_window.pixel_offset -= shift as f32 * (bar_width + settings::BAR_SPACING);
+                        }
+                        
+                        ctx.request_repaint();
+                    }
                 }
                 
 

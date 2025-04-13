@@ -217,15 +217,28 @@
  
      // --- ЭТАП 3: Отрисовка текстовых меток ---
      for (_price, label_text, y) in &price_labels_info {
-         // Исправлено: Разыменовываем y для сравнения
          if *y >= price_rect.top() - 2.0 && *y <= price_rect.bottom() + 12.0 {
-              painter.text(
-                  egui::pos2(rect.left() + 5.0, y - 2.0), // Используем y напрямую для позиционирования
-                  egui::Align2::LEFT_BOTTOM,
-                  label_text.clone(),
-                  egui::FontId::proportional(10.0),
-                  text_color,
-              );
+            let galley = painter.layout_no_wrap(
+                label_text.clone(),
+                egui::FontId::proportional(10.0),
+                text_color,
+            );
+            let text_rect = Rect::from_min_size(
+                egui::pos2(rect.left() + 5.0, *y - 2.0 - galley.size().y),
+                galley.size() + egui::vec2(4.0, 4.0), // padding 2px с каждой стороны
+            );
+            painter.rect_filled(
+                text_rect,
+                0.0, // угол скругления
+                Color32::from_rgba_premultiplied(20, 20, 20, 220), // темный полупрозрачный фон
+            );
+            painter.text(
+                egui::pos2(rect.left() + 5.0 + 2.0, *y - 2.0), // +2.0 для padding
+                egui::Align2::LEFT_BOTTOM,
+                label_text.clone(),
+                egui::FontId::proportional(10.0),
+                text_color,
+            );
          }
      }
  

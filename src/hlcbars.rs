@@ -40,7 +40,7 @@ pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &crate::DataWindow
 
     for (i, bar) in visible_slice.iter().enumerate() {
         // Вычисляем x так, чтобы правый край последнего бара совпадал с rect.right()
-        let x_right = price_rect.left() + ((i as f32 + 1.0) / count) * price_rect.width();
+        let x_right = price_rect.left() + ((i as f32 + 1.0) / count) * price_rect.width() + data_window.pixel_offset;
         let x_left = x_right - bar_width;
 
         let high_y = scale_price(bar.high);
