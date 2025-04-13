@@ -48,20 +48,21 @@ impl eframe::App for TradingApp {
                 );
 
                 let mut rect = response.rect;
+                self.crosshair.set_rect(rect);
                 rect.set_height(rect.height() - settings::CHART_BOTTOM_MARGIN); // Уменьшаем высоту для отступа снизу
-
+                // Crosshair handling
+                if let Some(pos) = ctx.pointer_hover_pos() {
+                    if rect.contains(pos) {
+                        self.crosshair.draw(ui, &self.data_window, pos);
+                        // Assuming highlight_bar is added from your previous request
+                        self.crosshair.highlight_bar(ui, &self.data_window, pos);
+                    }
+                }
                 // Рисуем компоненты графика
                 hlcbars::draw(ui, rect, &self.data_window, self.show_candles);
                 volbars::draw(ui, rect, &self.data_window);
                 axes::draw(ui, rect, &self.data_window);
 
-                // Перекрестие - работает при любом hover, даже без Sense::hover()
-                    if let Some(pos) = ctx.pointer_hover_pos() {
-                        if rect.contains(pos) {
-                            //self.crosshair.visible = true;
-                            self.crosshair.draw(ui, rect, &self.data_window, pos);
-                        }
-                    }
                 if response.dragged() && response.drag_delta().x != 0.0 {
                     let delta_x = response.drag_delta().x;
                     let bars_len = self.data_window.bars.len() as i64;
