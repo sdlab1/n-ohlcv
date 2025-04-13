@@ -3,9 +3,12 @@ use eframe::{Frame, egui};
 use crate::{TradingApp, axes, hlcbars, volbars};
 use crate::settings::*;
 
+
 impl eframe::App for TradingApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            //LIMITS RENDER
+            //ctx.request_repaint_after(std::time::Duration::from_millis(1000));
             // Сначала отображаем информацию о текущем баре (если есть)
             if let Some(pos) = ctx.pointer_hover_pos() {
                 if let Some(bar_info) = self.crosshair.get_bar_info(pos, &self.data_window) {
@@ -54,6 +57,11 @@ impl eframe::App for TradingApp {
                 let mut rect = response.rect.shrink(CHART_MARGIN); // Отступы по всем сторонам
                 rect.set_height(rect.height() - CHART_BOTTOM_MARGIN); // Уменьшаем высоту для отступа снизу
 
+                static mut UPDATE_COUNT: u32 = 0;
+                unsafe {
+                    UPDATE_COUNT += 1;
+                    println!("Update call: {}", UPDATE_COUNT);
+                }
                 // Рисуем компоненты графика
                 axes::draw(ui, rect, &self.data_window);
                 hlcbars::draw(ui, rect, &self.data_window, self.show_candles);
