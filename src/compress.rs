@@ -15,6 +15,7 @@ pub fn decompress_data(data: &[u8]) -> Result<Vec<u8>, Error> {
     let mut decoder = ZlibDecoder::new(Cursor::new(data));
     let mut output = Vec::new();
     decoder.read_to_end(&mut output)?;
+    println!("comp: {}, data: {}, ratio: {:.2}",data.len(),output.len(), output.len()/data.len());
     Ok(output)
 }
 

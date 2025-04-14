@@ -1,6 +1,5 @@
 //hlcbars.rs
 use eframe::egui;
-use crate::settings::*; // Импортируем настройки
 
 pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &crate::DataWindow, show_candles: bool) {
     let painter = ui.painter();
@@ -8,12 +7,8 @@ pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &crate::DataWindow
     let down_color = egui::Color32::from_rgb(180, 0, 0);
     let gray = egui::Color32::from_rgb(180, 180, 180);
 
-    // Применяем отступы из settings.rs
-    let mut chart_rect = rect.shrink(CHART_MARGIN);
-    chart_rect.set_height(chart_rect.height() - CHART_BOTTOM_MARGIN);
-
-    let volume_height = chart_rect.height() * data_window.volume_height_ratio;
-    let price_rect = egui::Rect::from_min_max(chart_rect.min, egui::pos2(chart_rect.max.x, chart_rect.max.y - volume_height));
+    let volume_height = rect.height() * data_window.volume_height_ratio;
+    let price_rect = egui::Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.max.y - volume_height));
 
     let (start, end) = data_window.visible_range;
     if start >= end || end as usize > data_window.bars.len() {

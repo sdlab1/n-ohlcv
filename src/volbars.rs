@@ -1,20 +1,15 @@
 // volbars.rs
 use eframe::egui;
-use crate::settings::*; // Импортируем настройки для отступов
 
 pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &crate::DataWindow) {
     let painter = ui.painter();
     let up_color = egui::Color32::from_rgb(100, 180, 100);
     let down_color = egui::Color32::from_rgb(180, 100, 100);
 
-    // Применяем отступы из settings.rs
-    let mut chart_rect = rect.shrink(CHART_MARGIN);
-    chart_rect.set_height(chart_rect.height() - CHART_BOTTOM_MARGIN);
-
-    let volume_height = chart_rect.height() * data_window.volume_height_ratio;
+    let volume_height = rect.height() * data_window.volume_height_ratio;
     let vol_rect = egui::Rect::from_min_max(
-        egui::pos2(chart_rect.min.x, chart_rect.max.y - volume_height),
-        chart_rect.max,
+        egui::pos2(rect.min.x, rect.max.y - volume_height),
+        rect.max,
     );
 
     let (start, end) = data_window.visible_range;

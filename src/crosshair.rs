@@ -24,9 +24,8 @@ impl Crosshair {
             return None;
         }
 
-        let chart_rect = rect.shrink(crate::settings::CHART_MARGIN);
-        let chart_left = chart_rect.left();
-        let chart_width = chart_rect.width();
+        let chart_left = rect.left();
+        let chart_width = rect.width();
 
         let adjusted_x = mouse_pos.x - data_window.pixel_offset;
         let normalized_x = (adjusted_x - chart_left) / chart_width;
@@ -78,12 +77,10 @@ impl Crosshair {
         };
 
         let painter = ui.painter();
-        let highlight_color = egui::Color32::from_rgb(100, 100, 100);;
+        let highlight_color = egui::Color32::from_rgb(100, 100, 100);
 
-        let mut chart_rect = rect.shrink(crate::settings::CHART_MARGIN);
-        chart_rect.set_height(chart_rect.height() - crate::settings::CHART_BOTTOM_MARGIN);
-        let volume_height = chart_rect.height() * data_window.volume_height_ratio;
-        let price_rect = egui::Rect::from_min_max(chart_rect.min, egui::pos2(chart_rect.max.x, chart_rect.max.y - volume_height));
+        let volume_height = rect.height() * data_window.volume_height_ratio;
+        let price_rect = egui::Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.max.y - volume_height));
 
         let (start, end) = data_window.visible_range;
         if start >= end || end as usize > data_window.bars.len() {
