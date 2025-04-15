@@ -1,12 +1,12 @@
-//timeframe.rs
 use crate::db::Database;
 use crate::fetch::{KLine, PRICE_MULTIPLIER};
-use crate::DataWindow;
-use chrono::{Duration, Utc, Timelike};
+use crate::DataWindow; //  Исправлен импорт
+use chrono::{Duration, Utc};
 use reqwest::blocking::Client;
 use std::error::Error;
 use std::thread;
 use std::time;
+use crate::Bar;
 
 const BLOCK_SIZE: usize = 1000;
 const UPDATE_INTERVAL: u64 = 300;
@@ -16,7 +16,7 @@ pub struct Timeframe;
 impl Timeframe {
     pub fn update_loop(client: &Client, db: &Database, symbol: &str, data_window: &mut DataWindow) -> Result<(), Box<dyn Error>> {
         let mut timer = time::Instant::now();
-    
+
         loop {
             if timer.elapsed().as_secs() >= UPDATE_INTERVAL {
                 match Self::fetch_data_chunk(client, symbol) {
@@ -33,62 +33,7 @@ impl Timeframe {
         }
     }
 
-    pub fn get_data_window(
-        db: &Database,
-        symbol: &str,
-        start_time: i64,
-        end_time: i64,
-        timeframe_minutes: i32,
-        data_window: &mut DataWindow,
-    ) -> Result<(), Box<dyn Error>> {
-        println!(
-            "get_data_window: symbol = {}, start_time = {}, end_time = {}, timeframe = {}",
-            symbol, start_time, end_time, timeframe_minutes
-        );
-        Self::sync_data(3, db, symbol, start_time, end_time, data_window)?;
-    
-        let mut bars = Vec::new();
-        let mut current_block_start = Self::get_dbtimestamp(start_time);
-    
-        while current_block_start <= end_time {
-            println!("Get block from db, timestamp: {}", current_block_start);
-            if let Some(mut block) = db.get_block(symbol, current_block_start)? {
-                if bars.is_empty() {
-                    if let Some(i) = block.iter().position(|k| {
-                        chrono::DateTime::from_timestamp_millis(k.open_time)
-                            .map_or(false, |dt| dt.minute() == 0)
-                    }) {
-                        block = block.split_off(i); // cut  "hh:00"
-                    }
-                }
-                let converted = Self::convert_to_timeframe(block, timeframe_minutes, false, data_window)?;
-                println!(
-                    "Block at {} has {} bars after conversion, remainder.len: {}",
-                    current_block_start,
-                    converted.len(),
-                    data_window.timeframe_remainder.len()
-                );
-                bars.extend(converted);
-            } else {
-                println!("No data for block at {}", current_block_start);
-            }
-            current_block_start += BLOCK_SIZE as i64 * 60_000;
-        }
-        println!("bars.len: {}", bars.len());
-        println!("data_window.recent_data (minutes): {}", data_window.recent_data.len());
-        bars.extend(Self::convert_to_timeframe(data_window.recent_data.to_vec(), timeframe_minutes, true, data_window)?);
-        data_window.bars = bars;
-        println!("data_window.bars.len: {}", data_window.bars.len());
-        let len = data_window.bars.len() as i64;
-        let window_size = 200.min(data_window.bars.len()) as i64;
-        data_window.visible_range = (
-            (len - window_size).max(0), // start
-            len                         // end
-        );
-        Ok(())
-    }
-
-    fn sync_data(
+    pub fn sync_data(
         pause_between_requests: u64,
         db: &Database,
         symbol: &str,
@@ -126,12 +71,12 @@ impl Timeframe {
         Ok(())
     }
 
-    fn convert_to_timeframe(
+    pub fn convert_to_timeframe(
         klines: Vec<KLine>,
         timeframe_minutes: i32,
         dolastbar: bool,
         data_window: &mut DataWindow,
-    ) -> Result<Vec<crate::Bar>, Box<dyn Error>> {
+    ) -> Result<Vec<Bar>, Box<dyn Error>> {
         let mut result = Vec::new();
         let mut current_open_time = 0;
         let mut current_open = 0.0;
@@ -139,30 +84,30 @@ impl Timeframe {
         let mut current_low = f64::MAX;
         let mut current_volume = 0.0;
         let mut count = 0;
-    
+
         // Объединяем остаток с текущими данными
         let mut combined_klines = data_window.timeframe_remainder.to_vec();
         combined_klines.extend(klines);
-    
+
         for (index, kline) in combined_klines.iter().enumerate() {
             let price_open = kline.open as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
             let price_high = kline.high as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
             let price_low = kline.low as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
             let price_close = kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
-    
+
             if count == 0 {
                 current_open_time = kline.open_time;
                 current_open = price_open;
             }
-    
+
             current_high = current_high.max(price_high);
             current_low = current_low.min(price_low);
             current_volume += kline.volume;
             count += 1;
-    
+
             if count >= timeframe_minutes as usize
             || (dolastbar && index == combined_klines.len() - 1) {
-                result.push(crate::Bar {
+                result.push(Bar {
                     time: current_open_time,
                     open: current_open,
                     high: current_high,
@@ -176,18 +121,18 @@ impl Timeframe {
                 current_volume = 0.0;
             }
         }
-    
+
         // Обновляем остаток в data_window
         data_window.timeframe_remainder = if count > 0 {
             combined_klines[combined_klines.len() - count..].to_vec()
         } else {
             Vec::new()
         };
-    
+
         Ok(result)
     }
 
-    fn get_dbtimestamp(timestamp_ms: i64) -> i64 {
+    pub fn get_dbtimestamp(timestamp_ms: i64) -> i64 {
         timestamp_ms - timestamp_ms % (BLOCK_SIZE as i64 * 60_000)
     }
 
@@ -203,7 +148,7 @@ impl Timeframe {
         )
     }
 
-    fn process_data_chunk(
+    pub fn process_data_chunk(
         symbol: &str,
         data: Vec<KLine>,
         db: &Database,

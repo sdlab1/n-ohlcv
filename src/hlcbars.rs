@@ -4,40 +4,29 @@ pub fn draw(
     rect: egui::Rect,
     data_window: &crate::DataWindow,
     show_candles: bool,
-) -> Option<(f64, f64, impl Fn(f64) -> f32)> {
+    scale_price: &impl Fn(f64) -> f32,
+) {
     let painter = ui.painter();
     let up_color = egui::Color32::from_rgb(0, 180, 0);
     let down_color = egui::Color32::from_rgb(180, 0, 0);
     let gray = egui::Color32::from_rgb(180, 180, 180);
 
     let volume_height = rect.height() * data_window.volume_height_ratio;
-    let price_rect = egui::Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.max.y - volume_height));
+    let price_rect = egui::Rect::from_min_max(
+        rect.min,
+        egui::pos2(rect.max.x, rect.max.y - volume_height),
+    );
 
     let (start, end) = data_window.visible_range;
     if start >= end || end as usize > data_window.bars.len() {
-        return None;
+        return;
     }
 
     let visible_slice = &data_window.bars[start as usize..end as usize];
     if visible_slice.is_empty() {
-        return None;
+        return;
     }
 
-    // Вычисляем минимум и максимум цен
-    let (min_price, max_price) = visible_slice.iter().fold((f64::MAX, f64::MIN), |(min, max), bar| {
-        (min.min(bar.low), max.max(bar.high))
-    });
-
-    let price_range = (max_price - min_price).max(1e-9);
-    let adjusted_min = min_price - price_range * 0.05;
-    let adjusted_max = max_price + price_range * 0.05;
-
-    // Функция масштабирования
-    let scale_price = move |price: f64| -> f32 {
-        price_rect.top() + ((adjusted_max - price) / (adjusted_max - adjusted_min)) as f32 * price_rect.height()
-    };
-
-    // Рисуем бары
     let count = visible_slice.len() as f32;
     let bar_width = (price_rect.width() / count).min(5.0);
 
@@ -73,6 +62,4 @@ pub fn draw(
             );
         }
     }
-
-    Some((adjusted_min, adjusted_max, scale_price))
 }

@@ -1,6 +1,7 @@
 // app_ui.rs
 use eframe::{Frame, egui};
 use crate::{TradingApp, axes, hlcbars, volbars};
+use crate::axes_util;
 use crate::settings;
 
 impl eframe::App for TradingApp {
@@ -52,12 +53,19 @@ impl eframe::App for TradingApp {
                 rect.set_height(rect.height() - settings::CHART_BOTTOM_MARGIN); // Уменьшаем высоту для отступа снизу
                 
                 // let me actually draw chart
-                if let Some((min_price, max_price, scale_price)) =
-                    hlcbars::draw(ui, rect, &self.data_window, self.show_candles)
-                {
-                    volbars::draw(ui, rect, &self.data_window);
-                    axes::draw(ui, rect, &self.data_window, min_price, max_price, &scale_price);
-                }                
+
+self.data_window.update_price_range_extrema();
+let volume_height = rect.height() * self.data_window.volume_height_ratio;
+let price_rect = egui::Rect::from_min_max(
+    rect.min,
+    egui::pos2(rect.max.x, rect.max.y - volume_height),
+);
+let scale_price = axes_util::create_scale_price_fn(&self.data_window, price_rect);
+
+axes::draw(ui, rect, &self.data_window);
+hlcbars::draw(ui, rect, &self.data_window, self.show_candles, &scale_price);
+volbars::draw(ui, rect, &self.data_window);
+
                 
                 // Crosshair handling
                 if let Some(pos) = ctx.pointer_hover_pos() {

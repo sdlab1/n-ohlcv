@@ -1,11 +1,11 @@
-//main.rs
 use crate::db::Database;
-use crate::fetch::KLine;
-use timeframe::Timeframe;
 use std::sync::Arc;
 use chrono::{Duration, Utc};
 use settings::*;
+mod timeframe;
+use crate::fetch::KLine;
 
+mod datawindow;
 pub mod settings;
 mod axes;
 mod axes_util;
@@ -14,30 +14,9 @@ mod volbars;
 mod compress;
 mod db;
 mod fetch;
-mod timeframe;
 mod gpu_backend;
 mod app_ui;
 mod crosshair;
-
-struct TradingApp {
-    db: Arc<db::Database>,
-    data_window: DataWindow,
-    timeframe: i32,
-    status_messages: Vec<String>,
-    symbol: String,
-    show_candles: bool,
-    crosshair: crosshair::Crosshair,
-}
-
-#[derive(Debug)]
-pub struct DataWindow {
-    bars: Vec<Bar>,
-    visible_range: (i64, i64), // Индексы первого и последнего отображаемого бара
-    recent_data: Vec<KLine>,
-    timeframe_remainder: Vec<KLine>,
-    volume_height_ratio: f32,
-    pixel_offset: f32,
-}
 
 #[derive(Debug, Clone)]
 pub struct Bar {
@@ -49,6 +28,28 @@ pub struct Bar {
     volume: f64,
 }
 
+#[derive(Debug)]
+pub struct DataWindow {
+    bars: Vec<Bar>,
+    visible_range: (i64, i64),
+    price: (f64, f64),
+    min_indexes: Option<Vec<usize>>,
+    max_indexes: Option<Vec<usize>>,
+    recent_data: Vec<KLine>,
+    timeframe_remainder: Vec<KLine>,
+    volume_height_ratio: f32,
+    pixel_offset: f32,
+}
+struct TradingApp {
+    db: Arc<db::Database>,
+    data_window: DataWindow,
+    timeframe: i32,
+    status_messages: Vec<String>,
+    symbol: String,
+    show_candles: bool,
+    crosshair: crosshair::Crosshair,
+}
+
 impl TradingApp {
     fn new(cc: &eframe::CreationContext<'_>, db: Arc<Database>, symbol: &str, timeframe: i32) -> Self {
         if let Some(render_state) = cc.wgpu_render_state.as_ref() {
@@ -56,9 +57,10 @@ impl TradingApp {
             println!("backend: {:?}", adapter_info.backend);
         } else if let Some(_gl) = cc.gl.as_ref() {
             println!("eframe is likely using Glow (OpenGL) backend.");
-        }  else {
+        } else {
             println!("Could not determine the graphics backend used by eframe.");
         }
+
         println!("Создание экземпляра TradingApp...");
         let now = chrono::Utc::now().timestamp_millis();
         let start_time = now - chrono::Duration::days(settings::INITIAL_LOAD_DAYS).num_milliseconds();
@@ -66,68 +68,74 @@ impl TradingApp {
         let mut data_window = DataWindow {
             bars: Vec::new(),
             visible_range: (0, 0),
+            price: (0.0, 0.0),
             recent_data: Vec::new(),
             timeframe_remainder: Vec::new(),
             volume_height_ratio: 0.2,
             pixel_offset: 0.0,
+            min_indexes: None,
+            max_indexes: None,
         };
 
-        // Начальная загрузка данных (может заблокировать первый кадр)
-        if let Err(e) = Timeframe::get_data_window(&db, symbol, start_time, now, timeframe, &mut data_window) {
+        // Загрузка начальных данных
+        if let Err(e) = DataWindow::get_data_window(&db, symbol, start_time, now, timeframe, &mut data_window) {
             eprintln!("Ошибка загрузки начальных данных: {}", e);
         }
 
-        // Настройка стиля (пример)
-         let mut style = (*cc.egui_ctx.style()).clone();
-         style.visuals.dark_mode = true;
-         cc.egui_ctx.set_style(style);
+        // 🔧 Обновляем ценовой диапазон после загрузки
+        data_window.update_price_range_extrema();
+
+        // 🔧 (Опционально) Строим индексы экстремумов
+        data_window.build_extrema_indexes();
+
+        // Темная тема
+        let mut style = (*cc.egui_ctx.style()).clone();
+        style.visuals.dark_mode = true;
+        cc.egui_ctx.set_style(style);
 
         Self {
-           db, // Перемещаем Arc<Database>
-           data_window,
-           timeframe: timeframe,
-           status_messages: vec![format!("Приложение запущено для {}", symbol)],
-           symbol: symbol.to_string(),
-           show_candles: true,
-           crosshair: crosshair::Crosshair::default(),
-           // last_update_time: Instant::now(), // Инициализация таймера
-       }
-   }
-
-
-   fn zoom(&mut self, amount: f64) {
-    let (mut start_idx, mut end_idx) = self.data_window.visible_range;
-    let len = self.data_window.bars.len() as i64;
-    if len == 0 || end_idx <= start_idx {
-        return;
+            db,
+            data_window,
+            timeframe,
+            status_messages: vec![format!("Приложение запущено для {}", symbol)],
+            symbol: symbol.to_string(),
+            show_candles: true,
+            crosshair: crosshair::Crosshair::default(),
+        }
     }
 
-    let range = end_idx - start_idx;
-    let zoom = (range as f64 * ZOOM_SENSITIVITY).max(1.0) as i64; // Минимум 1 бар
+    fn zoom(&mut self, amount: f64) {
+        let (mut start_idx, mut end_idx) = self.data_window.visible_range;
+        let len = self.data_window.bars.len() as i64;
+        if len == 0 || end_idx <= start_idx {
+            return;
+        }
 
-    if amount > 0.0 {
-        // Zoom in
-        start_idx = (start_idx + zoom).min(end_idx - 2);
-        end_idx = (end_idx - zoom).max(start_idx + 2).min(len);
-    } else {
-        // Zoom out
-        start_idx = (start_idx - zoom).max(0);
-        end_idx = (end_idx + zoom).min(len);
+        let range = end_idx - start_idx;
+        let zoom = (range as f64 * ZOOM_SENSITIVITY).max(1.0) as i64; // Минимум 1 бар
+
+        if amount > 0.0 {
+            // Zoom in
+            start_idx = (start_idx + zoom).min(end_idx - 2);
+            end_idx = (end_idx - zoom).max(start_idx + 2).min(len);
+        } else {
+            // Zoom out
+            start_idx = (start_idx - zoom).max(0);
+            end_idx = (end_idx + zoom).min(len);
+        }
+
+        // Финальная проверка
+        start_idx = start_idx.max(0);
+        end_idx = end_idx.min(len).max(start_idx + 2); // Минимум 2 бара
+
+        self.data_window.visible_range = (start_idx, end_idx);
     }
-
-    // Финальная проверка
-    start_idx = start_idx.max(0);
-    end_idx = end_idx.min(len).max(start_idx + 2); // Минимум 2 бара
-
-    self.data_window.visible_range = (start_idx, end_idx);
-}
-
 
     fn update_data_window(&mut self) {
         let now = Utc::now().timestamp_millis();
         let start_time = now - Duration::days(settings::INITIAL_LOAD_DAYS).num_milliseconds();
 
-        if let Err(e) = Timeframe::get_data_window(
+        if let Err(e) = DataWindow::get_data_window(
             &self.db,
             &self.symbol,
             start_time,
@@ -148,7 +156,6 @@ impl TradingApp {
         }
     }
 }
-
 
 fn main() -> eframe::Result<()> {
     println!("Запуск main...");
