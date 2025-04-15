@@ -1,7 +1,10 @@
 //hlcbars.rs
-use eframe::egui;
-
-pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &crate::DataWindow, show_candles: bool) {
+pub fn draw(
+    ui: &mut egui::Ui,
+    rect: egui::Rect,
+    data_window: &crate::DataWindow,
+    show_candles: bool,
+) -> Option<(f64, f64, impl Fn(f64) -> f32)> {
     let painter = ui.painter();
     let up_color = egui::Color32::from_rgb(0, 180, 0);
     let down_color = egui::Color32::from_rgb(180, 0, 0);
@@ -12,29 +15,33 @@ pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &crate::DataWindow
 
     let (start, end) = data_window.visible_range;
     if start >= end || end as usize > data_window.bars.len() {
-        return;
+        return None;
     }
 
     let visible_slice = &data_window.bars[start as usize..end as usize];
     if visible_slice.is_empty() {
-        return;
+        return None;
     }
 
+    // Вычисляем минимум и максимум цен
     let (min_price, max_price) = visible_slice.iter().fold((f64::MAX, f64::MIN), |(min, max), bar| {
         (min.min(bar.low), max.max(bar.high))
     });
 
-    let adjusted_min = min_price - (max_price - min_price) * 0.05;
-    let adjusted_max = max_price + (max_price - min_price) * 0.05;
-    let scale_price = |price: f64| -> f32 {
+    let price_range = (max_price - min_price).max(1e-9);
+    let adjusted_min = min_price - price_range * 0.05;
+    let adjusted_max = max_price + price_range * 0.05;
+
+    // Функция масштабирования
+    let scale_price = move |price: f64| -> f32 {
         price_rect.top() + ((adjusted_max - price) / (adjusted_max - adjusted_min)) as f32 * price_rect.height()
     };
 
+    // Рисуем бары
     let count = visible_slice.len() as f32;
-    let bar_width = (price_rect.width() / count).min(5.0); // Убрали +1, чтобы растянуть до края
+    let bar_width = (price_rect.width() / count).min(5.0);
 
     for (i, bar) in visible_slice.iter().enumerate() {
-        // Вычисляем x так, чтобы правый край последнего бара совпадал с rect.right()
         let x_right = price_rect.left() + ((i as f32 + 1.0) / count) * price_rect.width() + data_window.pixel_offset;
         let x_left = x_right - bar_width;
 
@@ -46,7 +53,7 @@ pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &crate::DataWindow
         let color = if bar.close >= bar.open { up_color } else { down_color };
 
         if show_candles {
-            let x_center = (x_left + x_right) / 2.0; // Центр для линий high-low
+            let x_center = (x_left + x_right) / 2.0;
             painter.line_segment([egui::pos2(x_center, high_y), egui::pos2(x_center, low_y)], (1.0, color));
             painter.rect_filled(
                 egui::Rect::from_min_max(
@@ -66,4 +73,6 @@ pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &crate::DataWindow
             );
         }
     }
+
+    Some((adjusted_min, adjusted_max, scale_price))
 }

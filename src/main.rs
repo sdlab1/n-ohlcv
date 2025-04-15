@@ -8,6 +8,7 @@ use settings::*;
 
 pub mod settings;
 mod axes;
+mod axes_util;
 mod hlcbars;
 mod volbars;
 mod compress;
@@ -60,7 +61,7 @@ impl TradingApp {
         }
         println!("Создание экземпляра TradingApp...");
         let now = chrono::Utc::now().timestamp_millis();
-        let start_time = now - chrono::Duration::days(7).num_milliseconds();
+        let start_time = now - chrono::Duration::days(settings::INITIAL_LOAD_DAYS).num_milliseconds();
 
         let mut data_window = DataWindow {
             bars: Vec::new(),
@@ -124,7 +125,7 @@ impl TradingApp {
 
     fn update_data_window(&mut self) {
         let now = Utc::now().timestamp_millis();
-        let start_time = now - Duration::days(7).num_milliseconds();
+        let start_time = now - Duration::days(settings::INITIAL_LOAD_DAYS).num_milliseconds();
 
         if let Err(e) = Timeframe::get_data_window(
             &self.db,

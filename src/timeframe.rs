@@ -53,14 +53,12 @@ impl Timeframe {
         while current_block_start <= end_time {
             println!("Get block from db, timestamp: {}", current_block_start);
             if let Some(mut block) = db.get_block(symbol, current_block_start)? {
-                println!("bars.len: {}",bars.len());
                 if bars.is_empty() {
                     if let Some(i) = block.iter().position(|k| {
                         chrono::DateTime::from_timestamp_millis(k.open_time)
                             .map_or(false, |dt| dt.minute() == 0)
                     }) {
-                        // cut  "hh:00"
-                        block = block.split_off(i);
+                        block = block.split_off(i); // cut  "hh:00"
                     }
                 }
                 let converted = Self::convert_to_timeframe(block, timeframe_minutes, false, data_window)?;
@@ -102,7 +100,7 @@ impl Timeframe {
         let mut current_time;
         let last_timestamp = db.get_last_timestamp(symbol).unwrap_or(0);
         if last_timestamp == 0 {
-            println!("No data found for {}, initializing with 7 days of data", symbol);
+            println!("No data found for {}, initializing with data", symbol);
             current_time = Self::get_dbtimestamp(start_time);
         }
         else {
@@ -230,7 +228,7 @@ impl Timeframe {
                 ).into());
             }
         }
-        db.insert_block(symbol, data[0].open_time, &data);
+        db.insert_block(symbol, data[0].open_time, &data)?;
         Ok(())
     }
 }

@@ -50,6 +50,15 @@ impl eframe::App for TradingApp {
                 let mut rect = response.rect;
                 self.crosshair.set_rect(rect);
                 rect.set_height(rect.height() - settings::CHART_BOTTOM_MARGIN); // Уменьшаем высоту для отступа снизу
+                
+                // let me actually draw chart
+                if let Some((min_price, max_price, scale_price)) =
+                    hlcbars::draw(ui, rect, &self.data_window, self.show_candles)
+                {
+                    volbars::draw(ui, rect, &self.data_window);
+                    axes::draw(ui, rect, &self.data_window, min_price, max_price, &scale_price);
+                }                
+                
                 // Crosshair handling
                 if let Some(pos) = ctx.pointer_hover_pos() {
                     if rect.contains(pos) {
@@ -58,10 +67,6 @@ impl eframe::App for TradingApp {
                         self.crosshair.highlight_bar(ui, &self.data_window, pos);
                     }
                 }
-                // Рисуем компоненты графика
-                hlcbars::draw(ui, rect, &self.data_window, self.show_candles);
-                volbars::draw(ui, rect, &self.data_window);
-                axes::draw(ui, rect, &self.data_window);
 
                 if response.dragged() && response.drag_delta().x != 0.0 {
                     let delta_x = response.drag_delta().x;
