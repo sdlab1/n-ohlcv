@@ -2,7 +2,7 @@
 use crate::db::Database;
 use crate::fetch::{KLine, PRICE_MULTIPLIER};
 use crate::DataWindow;
-use chrono::{Duration, Utc, DateTime, Timelike};
+use chrono::{Duration, Utc, Timelike};
 use reqwest::blocking::Client;
 use std::error::Error;
 use std::thread;
@@ -16,13 +16,11 @@ pub struct Timeframe;
 impl Timeframe {
     pub fn update_loop(client: &Client, db: &Database, symbol: &str, data_window: &mut DataWindow) -> Result<(), Box<dyn Error>> {
         let mut timer = time::Instant::now();
-        let mut retry_count = 0;
     
         loop {
             if timer.elapsed().as_secs() >= UPDATE_INTERVAL {
                 match Self::fetch_data_chunk(client, symbol) {
                     Ok(data) => {
-                        retry_count = 0;
                         Self::process_data_chunk(symbol, data, db, data_window)?;
                     },
                     Err(e) => {
@@ -55,6 +53,7 @@ impl Timeframe {
         while current_block_start <= end_time {
             println!("Get block from db, timestamp: {}", current_block_start);
             if let Some(mut block) = db.get_block(symbol, current_block_start)? {
+                println!("bars.len: {}",bars.len());
                 if bars.is_empty() {
                     if let Some(i) = block.iter().position(|k| {
                         chrono::DateTime::from_timestamp_millis(k.open_time)

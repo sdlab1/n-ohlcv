@@ -29,7 +29,7 @@ pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &crate::DataWindow
 
     let count = visible_slice.len() as f32;
     let bar_width = (vol_rect.width() / (count + 1.0)).min(5.0); // +1 для пространства справа
-    let spacing = (bar_width * 0.2).min(1.0);
+    //let spacing = (bar_width * 0.2).min(1.0);
 
     for (i, bar) in visible_slice.iter().enumerate() {
         // Вычисляем x пропорционально, как в axes.rs
