@@ -3,16 +3,22 @@ use eframe::{Frame, egui};
 use crate::{TradingApp, axes, hlcbars, volbars};
 use crate::axes_util;
 use crate::settings;
+use std::time::Instant;
+use crate::frame::FrameInfo;
 
 impl eframe::App for TradingApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
+        let frame_start_time = Instant::now();
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
             ui.horizontal(|ui| {
+                let measure_button_text = if self.measure_frame_time { "x" } else { "F" };
+                    if ui.button(measure_button_text).clicked() {
+                        self.measure_frame_time = !self.measure_frame_time;
+                    }
                 if ui.button(if self.show_candles { "bars" } else { "candles" }).clicked() {
                     self.show_candles = !self.show_candles;
                 }
-                
                 for &tf in &[5, 15, 60, 240] {
                     if ui.button(format!("{}", tf)).clicked() {
                         self.timeframe = tf;
@@ -108,10 +114,31 @@ impl eframe::App for TradingApp {
             });
 
             egui::ScrollArea::vertical().show(ui, |ui| {
+                let average_frame_time = self.frame_info.get_average_frame_time();
+                if self.measure_frame_time { // Добавляем условие
+                    if let Some(avg_time) = average_frame_time {
+                        let avg_ms = avg_time.as_secs_f64() * 1000.0;
+                        let message = format!("Avg. frame time (last {}): {:.2} ms", settings::AVERAGE_FRAME_HISTORY_SIZE, avg_ms);
+                        self.status_messages.push(message);
+                        if self.status_messages.len() > settings::STATUS_MESSAGE_MAX_COUNT {
+                            self.status_messages.remove(0);
+                        }
+                        self.frame_info.mark_status_displayed();
+                    }
+                } else {
+                    self.status_messages.clear(); // Очищаем сообщения, если измерение выключено
+                }
+
                 for msg in &self.status_messages {
                     ui.label(msg);
                 }
+
+                // Управляем видимостью ScrollArea
+                ui.set_enabled(!self.status_messages.is_empty());
             });
-        });
-    }
-}
+        }); // Закрытие для egui::CentralPanel::default().show
+        let frame_end_time = Instant::now();
+        self.frame_info.record_frame_time(frame_end_time - frame_start_time);
+        //ctx.request_repaint(); // Ensure continuous repainting
+    } // Закрытие для impl eframe::App for TradingApp
+} // Закрытие для impl TradingApp

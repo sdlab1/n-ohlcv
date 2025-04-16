@@ -2,9 +2,10 @@ use crate::db::Database;
 use std::sync::Arc;
 use chrono::{Duration, Utc};
 use settings::*;
-mod timeframe;
 use crate::fetch::KLine;
+use frame::FrameInfo;
 
+mod timeframe;
 mod datawindow;
 pub mod settings;
 mod axes;
@@ -17,6 +18,7 @@ mod fetch;
 mod gpu_backend;
 mod app_ui;
 mod crosshair;
+mod frame;
 
 #[derive(Debug, Clone)]
 pub struct Bar {
@@ -47,7 +49,9 @@ struct TradingApp {
     status_messages: Vec<String>,
     symbol: String,
     show_candles: bool,
+    measure_frame_time: bool,
     crosshair: crosshair::Crosshair,
+    frame_info: FrameInfo,
 }
 
 impl TradingApp {
@@ -93,7 +97,9 @@ impl TradingApp {
             status_messages: vec![format!("Приложение запущено для {}", symbol)],
             symbol: symbol.to_string(),
             show_candles: true,
+            measure_frame_time: false,
             crosshair: crosshair::Crosshair::default(),
+            frame_info: FrameInfo::default(),
         }
     }
 
