@@ -1,5 +1,5 @@
 // crosshair.rs
-use eframe::egui;
+use eframe::egui::Rect;
 use chrono::{DateTime, Utc};
 
 #[derive(Default)]
@@ -8,16 +8,11 @@ pub struct Crosshair {
 }
 
 impl Crosshair {
-    pub fn set_rect(&mut self, rect: egui::Rect) {
-        self.rect = Some(rect);
-    }
-
     pub fn get_bar_info(&self, mouse_pos: egui::Pos2, data_window: &crate::DataWindow) -> Option<String> {
         let rect = match self.rect {
             Some(rect) => rect,
             None => return None, // No chart area defined
         };
-
         let (start, end) = data_window.visible_range;
         let visible_slice = &data_window.bars.get(start as usize..end as usize)?;
         if visible_slice.is_empty() {
@@ -60,7 +55,7 @@ impl Crosshair {
             format!("{:.*}{}", decimals, value, unit)
         };
         Some(format!(
-            "{} | O:{:.2} H:{:.2} L:{:.2} C:{:.2} V:{}",
+            "{} | o {:.2} h {:.2} l {:.2} c {:.2} v {}",
             dt.format("%H:%M"),
             bar.open,
             bar.high,
@@ -70,12 +65,12 @@ impl Crosshair {
         ))
     }
 
-    pub fn highlight_bar(&self, ui: &mut egui::Ui, data_window: &crate::DataWindow, mouse_pos: egui::Pos2) {
-        let rect = match self.rect {
-            Some(rect) => rect,
-            None => return, // No chart area defined
-        };
-
+    pub fn highlight_bar(&self, 
+        ui: &mut egui::Ui, 
+        rect: Rect,
+        data_window: &crate::DataWindow, 
+        mouse_pos: egui::Pos2,
+        scale_price: &impl Fn(f64) -> f32,) {
         let painter = ui.painter();
         let highlight_color = egui::Color32::from_rgb(100, 100, 100);
 
@@ -104,16 +99,6 @@ impl Crosshair {
             return;
         }
         let bar = &visible_slice[index];
-
-        let (min_price, max_price) = visible_slice.iter().fold((f64::MAX, f64::MIN), |(min, max), b| {
-            (min.min(b.low), max.max(b.high))
-        });
-        let adjusted_min = min_price - (max_price - min_price) * 0.05;
-        let adjusted_max = max_price + (max_price - min_price) * 0.05;
-        let scale_price = |price: f64| -> f32 {
-            price_rect.top() + ((adjusted_max - price) / (adjusted_max - adjusted_min)) as f32 * price_rect.height()
-        };
-
         let count = visible_slice.len() as f32;
         let bar_width = (price_rect.width() / count).min(5.0);
         let i = index as f32;
@@ -123,24 +108,19 @@ impl Crosshair {
         let low_y = scale_price(bar.low);
 
         let expanded_rect = egui::Rect::from_min_max(
-            egui::pos2(x_left - 0.5, high_y - 0.5), // Сдвигаем левый и верхний край на 0.5px
-            egui::pos2(x_right + 0.5, low_y + 0.5),  // Сдвигаем правый и нижний край на 0.5px
+            egui::pos2(x_left - 0.5, high_y - 0.5), // shift left top by 0.5px
+            egui::pos2(x_right + 0.5, low_y + 0.5),  // shift right bottom by 0.5px
         );
-
-        // 4. Рисуем закрашенный прямоугольник
+        // draw filled rect
         painter.rect_filled(
             expanded_rect,
-            1.0, // Без скругления углов
+            1.0, // round angles
             highlight_color
         );
     }
 
-    pub fn draw(&self, ui: &mut egui::Ui, _data_window: &crate::DataWindow, mouse_pos: egui::Pos2) {
-        let rect = match self.rect {
-            Some(rect) => rect,
-            None => return, // No chart area defined
-        };
-
+    pub fn draw(&mut self, ui: &mut egui::Ui, rect: Rect, _data_window: &crate::DataWindow, mouse_pos: egui::Pos2) {
+        self.rect = Some(rect);
         let painter = ui.painter();
         let color = egui::Color32::from_rgba_unmultiplied(255, 255, 255, 100);
 

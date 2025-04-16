@@ -3,7 +3,6 @@ use eframe::egui::{self, Color32, Rect, Ui};
 use chrono::{DateTime, Utc, Datelike};
 use crate::DataWindow;
 use crate::axes_util::{
-    create_scale_price_fn,
     generate_price_labels, deduplicate_price_labels,
     choose_time_interval, format_time_label,
 };
@@ -12,6 +11,7 @@ pub fn draw(
     ui: &mut Ui,
     rect: Rect,
     data_window: &DataWindow,
+    scale_price: &impl Fn(f64) -> f32,
 ) {
     let painter = ui.painter();
     let text_color = ui.style().visuals.text_color();
@@ -20,8 +20,6 @@ pub fn draw(
     let volume_height = rect.height() * data_window.volume_height_ratio;
     let price_rect = Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.max.y - volume_height));
     let (min_price, max_price) = data_window.price;
-    let scale_price = create_scale_price_fn(data_window, price_rect);
-
     if min_price >= max_price {
         return;
     }

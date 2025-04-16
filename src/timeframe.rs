@@ -72,7 +72,7 @@ impl Timeframe {
     }
 
     pub fn convert_to_timeframe(
-        klines: Vec<KLine>,
+        mut klines: Vec<KLine>,
         timeframe_minutes: i32,
         dolastbar: bool,
         data_window: &mut DataWindow,
@@ -84,51 +84,43 @@ impl Timeframe {
         let mut current_low = f64::MAX;
         let mut current_volume = 0.0;
         let mut count = 0;
-
-        // Объединяем остаток с текущими данными
-        let mut combined_klines = data_window.timeframe_remainder.to_vec();
-        combined_klines.extend(klines);
-
-        for (index, kline) in combined_klines.iter().enumerate() {
-            let price_open = kline.open as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
+        let mut current_processing_klines = std::mem::take(&mut data_window.timeframe_remainder);
+        current_processing_klines.append(&mut klines);
+        let total_len = current_processing_klines.len();
+        let mut items_processed_in_loop = 0;
+        for kline in &current_processing_klines {
             let price_high = kline.high as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
             let price_low = kline.low as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
-            let price_close = kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
-
             if count == 0 {
                 current_open_time = kline.open_time;
-                current_open = price_open;
+                current_open = kline.open as f64 / 10f64.powi(PRICE_MULTIPLIER as i32);
+                current_high = price_high;
+                current_low = price_low;
+                current_volume = kline.volume;
+            } else {
+                current_high = current_high.max(price_high);
+                current_low = current_low.min(price_low);
+                current_volume += kline.volume;
             }
-
-            current_high = current_high.max(price_high);
-            current_low = current_low.min(price_low);
-            current_volume += kline.volume;
+            items_processed_in_loop += 1;
             count += 1;
-
-            if count >= timeframe_minutes as usize
-            || (dolastbar && index == combined_klines.len() - 1) {
+            if count >= timeframe_minutes as usize || (dolastbar && items_processed_in_loop == total_len) {
                 result.push(Bar {
                     time: current_open_time,
                     open: current_open,
                     high: current_high,
                     low: current_low,
-                    close: price_close,
+                    close:  kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32),
                     volume: current_volume,
                 });
                 count = 0;
-                current_high = f64::MIN;
-                current_low = f64::MAX;
-                current_volume = 0.0;
             }
         }
-
-        // Обновляем остаток в data_window
-        data_window.timeframe_remainder = if count > 0 {
-            combined_klines[combined_klines.len() - count..].to_vec()
+        if count > 0 && items_processed_in_loop == total_len {
+             data_window.timeframe_remainder = current_processing_klines.drain(total_len - count..).collect();
         } else {
-            Vec::new()
-        };
-
+             data_window.timeframe_remainder.clear();
+        }
         Ok(result)
     }
 

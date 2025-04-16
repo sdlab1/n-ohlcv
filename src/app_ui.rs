@@ -41,40 +41,32 @@ impl eframe::App for TradingApp {
             });
 
             egui::Frame::canvas(ui.style()).show(ui, |ui| {
-                // Выделяем область с возможностью drag
                 let response = ui.interact(
                     ui.available_rect_before_wrap(), 
                     ui.id().with("chart_area"),
-                    egui::Sense::drag() // Только для перемещения
+                    egui::Sense::drag()
                 );
 
                 let mut rect = response.rect;
-                self.crosshair.set_rect(rect);
-                rect.set_height(rect.height() - settings::CHART_BOTTOM_MARGIN); // Уменьшаем высоту для отступа снизу
-                
+                rect.set_height(rect.height() - settings::CHART_BOTTOM_MARGIN);
                 // let me actually draw chart
-
-self.data_window.update_price_range_extrema();
-let volume_height = rect.height() * self.data_window.volume_height_ratio;
-let price_rect = egui::Rect::from_min_max(
-    rect.min,
-    egui::pos2(rect.max.x, rect.max.y - volume_height),
-);
-let scale_price = axes_util::create_scale_price_fn(&self.data_window, price_rect);
-
-axes::draw(ui, rect, &self.data_window);
-hlcbars::draw(ui, rect, &self.data_window, self.show_candles, &scale_price);
-volbars::draw(ui, rect, &self.data_window);
-
-                
+                self.data_window.update_price_range_extrema();
+                let volume_height = rect.height() * self.data_window.volume_height_ratio;
+                let price_rect = egui::Rect::from_min_max(
+                    rect.min,
+                    egui::pos2(rect.max.x, rect.max.y - volume_height),
+                );
+                let scale_price = axes_util::create_scale_price_fn(&self.data_window, price_rect);
                 // Crosshair handling
                 if let Some(pos) = ctx.pointer_hover_pos() {
                     if rect.contains(pos) {
-                        self.crosshair.draw(ui, &self.data_window, pos);
-                        // Assuming highlight_bar is added from your previous request
-                        self.crosshair.highlight_bar(ui, &self.data_window, pos);
+                        self.crosshair.draw(ui, rect, &self.data_window, pos);
+                        self.crosshair.highlight_bar(ui,rect, &self.data_window, pos, &scale_price);
                     }
                 }
+                hlcbars::draw(ui, rect, &self.data_window, self.show_candles, &scale_price);
+                volbars::draw(ui, rect, &self.data_window);
+                axes::draw(ui, rect, &self.data_window, &scale_price);
 
                 if response.dragged() && response.drag_delta().x != 0.0 {
                     let delta_x = response.drag_delta().x;
@@ -104,7 +96,6 @@ volbars::draw(ui, rect, &self.data_window);
                             self.data_window.visible_range = (new_start, new_end);
                             self.data_window.pixel_offset -= shift as f32 * (bar_width + settings::BAR_SPACING);
                         }
-                        
                         ctx.request_repaint();
                     }
                 }

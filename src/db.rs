@@ -10,7 +10,11 @@ pub struct Database {
 
 impl Database {
     pub fn new(path: &str) -> Result<Self, sled::Error> {
-        sled::open(path).map(|db| Self { db })
+        let config = sled::Config::default()
+            .path(path)
+            .cache_capacity(4 * 1024 * 1024)
+            .use_compression(false); 
+        config.open().map(|db| Self { db })
     }
 
     pub fn insert_block(

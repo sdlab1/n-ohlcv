@@ -79,16 +79,9 @@ impl TradingApp {
 
         // Загрузка начальных данных
         if let Err(e) = DataWindow::get_data_window(&db, symbol, start_time, now, timeframe, &mut data_window) {
-            eprintln!("Ошибка загрузки начальных данных: {}", e);
+            eprintln!("Unable to get data window: {}", e);
         }
-
-        // 🔧 Обновляем ценовой диапазон после загрузки
-        data_window.update_price_range_extrema();
-
-        // 🔧 (Опционально) Строим индексы экстремумов
-        data_window.build_extrema_indexes();
-
-        // Темная тема
+        // dark theme
         let mut style = (*cc.egui_ctx.style()).clone();
         style.visuals.dark_mode = true;
         cc.egui_ctx.set_style(style);

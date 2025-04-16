@@ -6,7 +6,6 @@ use crate::timeframe;
 
 pub const BLOCK_SIZE: usize = 1000;
 
-
 impl DataWindow {
     pub fn get_data_window(
         db: &Database,
@@ -61,6 +60,7 @@ impl DataWindow {
             len                         // end
         );
         data_window.build_extrema_indexes();
+        data_window.update_price_range_extrema();
         Ok(())
     }
 
@@ -119,7 +119,7 @@ impl DataWindow {
         };
     }
 
-    pub fn build_extrema_indexes(&mut self) {
+    fn build_extrema_indexes(&mut self) {
         let mut mins: Vec<usize> = (0..self.bars.len()).collect();
         let mut maxs: Vec<usize> = (0..self.bars.len()).collect();
 
