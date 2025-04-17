@@ -3,6 +3,10 @@ name = "n-ohlcv"
 version = "0.1.0"
 edition = "2021"
 
+[profile.dev.package."*"]
+# Optimize all dependencies even in debug builds (does not affect workspace packages):
+opt-level = 2
+
 [dependencies]
 lazy_static = "1.4.0"
 chrono = { version = "0.4.31", features = ["serde"] }
@@ -10,11 +14,12 @@ sled = "0.34.7"
 reqwest = { version = "0.11.23", features = ["blocking", "json"] }
 serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0.108"
-egui = "0.26.0"
-eframe = { version = "0.26.0", features = ["wgpu"] }
-wgpu = "0.19.3"
 flate2 = { version = "1.0.28", features = ["zlib"] }
 anyhow = "1.0.75"
 thiserror = "1.0.50"
 bincode = "2.0"
 xz2 = "0.1.7"
+eframe = "0.31.1"
+egui = "0.31.1"
+wgpu = "25.0.0"
+

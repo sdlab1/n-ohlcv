@@ -59,14 +59,14 @@ struct TradingApp {
 
 impl TradingApp {
     fn new(cc: &eframe::CreationContext<'_>, db: Arc<Database>, symbol: &str, timeframe: i32) -> Self {
-        if let Some(render_state) = cc.wgpu_render_state.as_ref() {
+        /*if let Some(render_state) = &cc.wgpu_render_state() {
             let adapter_info = render_state.adapter.get_info();
             println!("backend: {:?}", adapter_info.backend);
         } else if let Some(_gl) = cc.gl.as_ref() {
             println!("eframe is likely using Glow (OpenGL) backend.");
         } else {
             println!("Could not determine the graphics backend used by eframe.");
-        }
+        }*/
 
         println!("Создание экземпляра TradingApp...");
         let now = chrono::Utc::now().timestamp_millis();
@@ -172,7 +172,7 @@ fn main() -> eframe::Result<()> {
     // Запускаем приложение eframe
     println!("Запуск eframe::run_native...");
     eframe::run_native(
-        "BTC/USDT OHLCV (Однопоточный)",
+        "n-ohlcv",
         native_options,
         // Замыкание создает ЕДИНСТВЕННЫЙ экземпляр TradingApp
         Box::new(move |cc| {
@@ -180,7 +180,7 @@ fn main() -> eframe::Result<()> {
             // Передаем Arc<Database> в конструктор
             let mut app = TradingApp::new(cc, db.clone(), "BTCUSDT", 15);
             app.message_add( format!("Started for {}", app.symbol));
-            Box::new(app)
+            Ok(Box::new(app))
         }),
     )
 }
