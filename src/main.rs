@@ -1,9 +1,9 @@
 use crate::db::Database;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 use chrono::{Duration, Utc};
 use settings::*;
 use crate::fetch::KLine;
-use frame::FrameInfo;
+use performance::FrameInfo;
 
 mod timeframe;
 mod datawindow;
@@ -18,7 +18,7 @@ mod fetch;
 mod gpu_backend;
 mod app_ui;
 mod crosshair;
-mod frame;
+mod performance;
 
 #[derive(Debug, Clone)]
 pub struct Bar {
@@ -47,6 +47,7 @@ struct TradingApp {
     data_window: DataWindow,
     timeframe: i32,
     status_messages: Vec<String>,
+    status_messages_last_ts: Option<Instant>,
     symbol: String,
     show_candles: bool,
     measure_frame_time: bool,
@@ -94,12 +95,20 @@ impl TradingApp {
             db,
             data_window,
             timeframe,
-            status_messages: vec![format!("Приложение запущено для {}", symbol)],
+            status_messages: Vec::new(),
+            status_messages_last_ts: None,
             symbol: symbol.to_string(),
             show_candles: true,
             measure_frame_time: false,
             crosshair: crosshair::Crosshair::default(),
             frame_info: FrameInfo::default(),
+        }
+    }
+    fn message_add(&mut self, new_message: String) {
+        self.status_messages.push(new_message);
+        self.status_messages_last_ts = Some(Instant::now());
+        if self.status_messages.len() > STATUS_MESSAGE_MAX_COUNT {
+            self.status_messages.remove(0);
         }
     }
 
@@ -142,16 +151,9 @@ impl TradingApp {
             self.timeframe,
             &mut self.data_window,
         ) {
-            self.log_status(format!("Ошибка обновления данных: {}", e));
+            self.message_add(format!("Ошибка обновления данных: {}", e));
         } else {
-            self.log_status(format!("Обновлено отображение: {} баров", self.data_window.bars.len()));
-        }
-    }
-
-    fn log_status(&mut self, message: String) {
-        self.status_messages.push(message);
-        if self.status_messages.len() > 100 {
-            self.status_messages.remove(0);
+            self.message_add(format!("Обновлено отображение: {} баров", self.data_window.bars.len()));
         }
     }
 }
@@ -174,7 +176,8 @@ fn main() -> eframe::Result<()> {
         Box::new(move |cc| {
             println!("Создание экземпляра TradingApp внутри eframe...");
             // Передаем Arc<Database> в конструктор
-            let app = TradingApp::new(cc, db.clone(), "BTCUSDT", 15);
+            let mut app = TradingApp::new(cc, db.clone(), "BTCUSDT", 15);
+            app.message_add( format!("Started for {}", app.symbol));
             Box::new(app)
         }),
     )

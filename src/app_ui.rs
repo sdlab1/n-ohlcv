@@ -3,8 +3,7 @@ use eframe::{Frame, egui};
 use crate::{TradingApp, axes, hlcbars, volbars};
 use crate::axes_util;
 use crate::settings;
-use std::time::Instant;
-use crate::frame::FrameInfo;
+use std::time::{Duration, Instant};
 
 impl eframe::App for TradingApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
@@ -34,6 +33,12 @@ impl eframe::App for TradingApp {
                 });
                 ui.add_space(15.0);    
                 // bar info
+                if self.measure_frame_time {
+                    if let Some(avg_time) = self.frame_info.get_average_frame_time() {
+                        let t_avg = avg_time.as_secs_f64() * 1000.0;
+                            ui.label(format!("{:.2} ms ", t_avg));
+                    }
+                }
                 if let Some(pos) = ctx.pointer_hover_pos() {
                     if let Some(bar_info) = self.crosshair.get_bar_info(pos, &self.data_window) {
                         ui.horizontal(|ui| {
@@ -105,37 +110,21 @@ impl eframe::App for TradingApp {
                         ctx.request_repaint();
                     }
                 }
-                
-
-                let scroll_delta = ctx.input(|i| i.raw_scroll_delta.y);
+                                let scroll_delta = ctx.input(|i| i.raw_scroll_delta.y);
                 if scroll_delta != 0.0 {
                     self.zoom(scroll_delta as f64 * 0.1);
                 }
             });
 
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                let average_frame_time = self.frame_info.get_average_frame_time();
-                if self.measure_frame_time { // Добавляем условие
-                    if let Some(avg_time) = average_frame_time {
-                        let avg_ms = avg_time.as_secs_f64() * 1000.0;
-                        let message = format!("Avg. frame time (last {}): {:.2} ms", settings::AVERAGE_FRAME_HISTORY_SIZE, avg_ms);
-                        self.status_messages.push(message);
-                        if self.status_messages.len() > settings::STATUS_MESSAGE_MAX_COUNT {
-                            self.status_messages.remove(0);
-                        }
-                        self.frame_info.mark_status_displayed();
+            if self.status_messages_last_ts
+            .map_or(false, |ts| 
+                ts.elapsed() < Duration::from_secs(settings::STATUS_MESSAGE_HIDE_TIME)) {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    for msg in &self.status_messages {
+                        ui.label(msg);
                     }
-                } else {
-                    self.status_messages.clear(); // Очищаем сообщения, если измерение выключено
-                }
-
-                for msg in &self.status_messages {
-                    ui.label(msg);
-                }
-
-                // Управляем видимостью ScrollArea
-                ui.set_enabled(!self.status_messages.is_empty());
-            });
+                });
+            }
         }); // Закрытие для egui::CentralPanel::default().show
         let frame_end_time = Instant::now();
         self.frame_info.record_frame_time(frame_end_time - frame_start_time);

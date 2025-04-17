@@ -5,7 +5,6 @@ use crate::settings; // Импортируем настройки
 pub struct FrameInfo {
     frame_times: VecDeque<Duration>,
     last_status_update: Instant,
-    status_message_lifetime: Duration,
 }
 
 impl Default for FrameInfo {
@@ -13,7 +12,6 @@ impl Default for FrameInfo {
         Self {
             frame_times: VecDeque::new(),
             last_status_update: Instant::now(),
-            status_message_lifetime: Duration::from_secs(settings::STATUS_MESSAGE_LIFETIME_SECONDS),
         }
     }
 }
@@ -32,10 +30,6 @@ impl FrameInfo {
         }
         let sum: Duration = self.frame_times.iter().sum();
         Some(sum / self.frame_times.len() as u32)
-    }
-
-    pub fn should_display_status(&self) -> bool {
-        Instant::now() - self.last_status_update < self.status_message_lifetime
     }
 
     pub fn mark_status_displayed(&mut self) {
