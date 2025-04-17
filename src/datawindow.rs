@@ -1,3 +1,4 @@
+use crate::rsi::WilderRSI;
 use crate::db::Database;
 use crate::DataWindow;
 use chrono::Timelike;
@@ -23,7 +24,12 @@ impl DataWindow {
 
         let mut bars = Vec::new();
         let mut current_block_start = timeframe::Timeframe::get_dbtimestamp(start_time);
-
+        let period = 14;
+        let mut rsi_calculator = WilderRSI::new(14);
+        /*for data_point in &ohlc_data {
+            let check_result = rsi_calculator.process_ohlcv(data_point);
+            println!("{}", check_result);
+        }*/
         while current_block_start <= end_time {
             println!("Get block from db, timestamp: {}", current_block_start);
             if let Some(mut block) = db.get_block(symbol, current_block_start)? {
@@ -35,7 +41,9 @@ impl DataWindow {
                         block = block.split_off(i); // cut  "hh:00"
                     }
                 }
-                let converted = timeframe::Timeframe::convert_to_timeframe(block, timeframe_minutes, false, data_window)?;
+                let converted = timeframe::Timeframe::convert_to_timeframe(
+                    block, timeframe_minutes, false, 
+                    data_window, &mut rsi_calculator)?;
                 println!(
                     "Block at {} has {} bars after conversion, remainder.len: {}",
                     current_block_start,
@@ -50,7 +58,9 @@ impl DataWindow {
         }
         println!("bars.len: {}", bars.len());
         println!("data_window.recent_data (minutes): {}", data_window.recent_data.len());
-        bars.extend(timeframe::Timeframe::convert_to_timeframe(data_window.recent_data.to_vec(), timeframe_minutes, true, data_window)?);
+        bars.extend(timeframe::Timeframe::convert_to_timeframe(
+            data_window.recent_data.to_vec(), timeframe_minutes, true, 
+            data_window, &mut rsi_calculator)?);
         data_window.bars = bars;
         println!("data_window.bars.len: {}", data_window.bars.len());
         let len = data_window.bars.len() as i64;
@@ -61,6 +71,9 @@ impl DataWindow {
         );
         data_window.build_extrema_indexes();
         data_window.update_price_range_extrema();
+        /*for bar in  &data_window.bars[data_window.bars.len()-50 ..] {
+            println!("{:?}", bar);
+        }*/
         Ok(())
     }
 

@@ -1,7 +1,8 @@
+use crate::rsi;
 use crate::db::Database;
 use crate::fetch::{KLine, PRICE_MULTIPLIER};
-use crate::DataWindow; //  Исправлен импорт
-use chrono::{Duration, Utc};
+use crate::DataWindow;
+use chrono::{DateTime, Duration, Utc};
 use reqwest::blocking::Client;
 use std::error::Error;
 use std::thread;
@@ -76,6 +77,7 @@ impl Timeframe {
         timeframe_minutes: i32,
         dolastbar: bool,
         data_window: &mut DataWindow,
+        rsi_calculator: &mut rsi::WilderRSI,
     ) -> Result<Vec<Bar>, Box<dyn Error>> {
         let mut result = Vec::new();
         let mut current_open_time = 0;
@@ -102,6 +104,17 @@ impl Timeframe {
                 current_low = current_low.min(price_low);
                 current_volume += kline.volume;
             }
+            let rsi_val = rsi_calculator.add_price(
+                current_open_time,
+                 kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32));
+            /*(&
+            {
+                timestamp: current_open_time as u64,
+                open: current_open,
+                high: current_high,
+                low: current_low,
+                close: kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32),
+                });*/
             items_processed_in_loop += 1;
             count += 1;
             if count >= timeframe_minutes as usize || (dolastbar && items_processed_in_loop == total_len) {
@@ -114,6 +127,20 @@ impl Timeframe {
                     volume: current_volume,
                 });
                 count = 0;
+                /* DEBUG
+                let time_str = DateTime::from_timestamp(current_open_time /1000 , 0)
+                    .map(|dt: DateTime<Utc>| dt.format("%d %b %H:%M").to_string())
+                    .unwrap_or_else(|| "Invalid timestamp".to_string());
+                println!(
+                    "{} open: {:.2}, high: {:.2}, low: {:.2}, close: {:.2}, volume: {:.2}, rsi: {}",
+                    time_str,
+                    current_open,
+                    current_high,
+                    current_low,
+                    kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32),
+                    current_volume,
+                    rsi_val.map_or("None".to_string(), |v| format!("{:.2}", v))
+                );*/
             }
         }
         if count > 0 && items_processed_in_loop == total_len {

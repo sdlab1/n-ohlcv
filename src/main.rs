@@ -5,6 +5,7 @@ use settings::*;
 use crate::fetch::KLine;
 use performance::FrameInfo;
 
+
 mod timeframe;
 mod datawindow;
 pub mod settings;
@@ -19,6 +20,7 @@ mod gpu_backend;
 mod app_ui;
 mod crosshair;
 mod performance;
+mod rsi;
 
 #[derive(Debug, Clone)]
 pub struct Bar {
