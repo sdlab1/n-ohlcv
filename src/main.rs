@@ -5,7 +5,6 @@ use settings::*;
 use crate::fetch::KLine;
 use performance::FrameInfo;
 
-
 mod timeframe;
 mod datawindow;
 pub mod settings;
@@ -59,16 +58,7 @@ struct TradingApp {
 
 impl TradingApp {
     fn new(cc: &eframe::CreationContext<'_>, db: Arc<Database>, symbol: &str, timeframe: i32) -> Self {
-        /*if let Some(render_state) = &cc.wgpu_render_state() {
-            let adapter_info = render_state.adapter.get_info();
-            println!("backend: {:?}", adapter_info.backend);
-        } else if let Some(_gl) = cc.gl.as_ref() {
-            println!("eframe is likely using Glow (OpenGL) backend.");
-        } else {
-            println!("Could not determine the graphics backend used by eframe.");
-        }*/
-
-        println!("Создание экземпляра TradingApp...");
+        println!("Creating TradingApp object");
         let now = chrono::Utc::now().timestamp_millis();
         let start_time = now - chrono::Duration::days(settings::INITIAL_LOAD_DAYS).num_milliseconds();
 
@@ -161,26 +151,15 @@ impl TradingApp {
 }
 
 fn main() -> eframe::Result<()> {
-    println!("Запуск main...");
-    // Создаем Arc с базой данных (Arc для DB все еще может быть полезен,
-    // т.к. сама DB может быть сложной для Clone)
-    let db = Arc::new(Database::new("ohlcv_db").expect("Ошибка инициализации БД"));
-
-    // Опции для окна eframe
-    let native_options = gpu_backend::native_options(); // Или NativeOptions::default()
-
+    let db = Arc::new(Database::new("ohlcv_db")
+        .expect("Error initializing DB"));
     // Запускаем приложение eframe
-    println!("Запуск eframe::run_native...");
+    println!("Running eframe::run_native");
     eframe::run_native(
-        "n-ohlcv",
-        native_options,
-        // Замыкание создает ЕДИНСТВЕННЫЙ экземпляр TradingApp
-        Box::new(move |cc| {
-            println!("Создание экземпляра TradingApp внутри eframe...");
-            // Передаем Arc<Database> в конструктор
-            let mut app = TradingApp::new(cc, db.clone(), "BTCUSDT", 15);
-            app.message_add( format!("Started for {}", app.symbol));
-            Ok(Box::new(app))
-        }),
-    )
+        "n-ohlc",
+        gpu_backend::native_options(),
+        Box::new(|cc| Ok(Box::new(TradingApp::new(cc, db.clone(), "BTCUSDT", 15)))),
+    ).unwrap(); 
+
+    Ok(())
 }
