@@ -25,7 +25,7 @@ impl DataWindow {
         let mut bars = Vec::new();
         let mut current_block_start = timeframe::Timeframe::get_dbtimestamp(start_time);
         let period = 14;
-        let mut rsi_calculator = WilderRSI::new(14);
+        let mut rsi_calculator = WilderRSI::new(period);
         /*for data_point in &ohlc_data {
             let check_result = rsi_calculator.process_ohlcv(data_point);
             println!("{}", check_result);
