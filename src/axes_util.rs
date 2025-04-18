@@ -1,5 +1,5 @@
 //axes_util.rs
-use crate::{settings, DataWindow};
+use crate::{settings, datawindow::DataWindow};
 use chrono::{DateTime, Utc, Datelike, Timelike};
 
 pub fn create_scale_price_fn(

@@ -30,4 +30,5 @@ xz2 = "0.1.7"
 eframe = { version = "0.31.1", features = ["wgpu"] }
 egui = "0.31.1"
 wgpu = "25.0.0"
+pollster = "0.4.0"
 

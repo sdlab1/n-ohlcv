@@ -1,16 +1,25 @@
 use crate::rsi;
 use crate::db::Database;
 use crate::fetch::{KLine, PRICE_MULTIPLIER};
-use crate::DataWindow;
+use crate::datawindow::DataWindow;
 use chrono::{DateTime, Duration, Utc};
 use reqwest::blocking::Client;
 use std::error::Error;
 use std::thread;
 use std::time;
-use crate::Bar;
 
 const BLOCK_SIZE: usize = 1000;
 const UPDATE_INTERVAL: u64 = 300;
+
+#[derive(Debug, Clone)]
+pub struct Bar {
+pub time: i64,
+pub open: f64,
+pub high: f64,
+pub low: f64,
+pub close: f64,
+pub volume: f64,
+}
 
 pub struct Timeframe;
 

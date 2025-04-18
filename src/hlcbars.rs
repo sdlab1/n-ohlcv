@@ -1,7 +1,9 @@
+use crate::datawindow::DataWindow;
+
 pub fn draw(
     ui: &mut egui::Ui,
     rect: egui::Rect,
-    data_window: &crate::DataWindow,
+    data_window: &DataWindow,
     show_candles: bool,
     scale_price: &impl Fn(f64) -> f32,
 ) {

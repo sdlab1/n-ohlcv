@@ -1,7 +1,7 @@
 //axes.rs
 use eframe::egui::{self, Color32, Rect, Ui};
 use chrono::{DateTime, Utc, Datelike};
-use crate::DataWindow;
+use crate::datawindow::DataWindow;
 use crate::axes_util::{
     generate_price_labels, deduplicate_price_labels,
     choose_time_interval, format_time_label,

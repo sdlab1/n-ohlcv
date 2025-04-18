@@ -2097,6 +2097,7 @@ dependencies = [
  "egui",
  "flate2",
  "lazy_static",
+ "pollster",
  "reqwest",
  "serde",
  "serde_json",

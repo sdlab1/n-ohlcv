@@ -1,6 +1,7 @@
 // crosshair.rs
 use eframe::egui::Rect;
 use chrono::{DateTime, Utc};
+use crate::datawindow::DataWindow;
 
 #[derive(Default)]
 pub struct Crosshair {
@@ -8,7 +9,7 @@ pub struct Crosshair {
 }
 
 impl Crosshair {
-    pub fn get_bar_info(&self, mouse_pos: egui::Pos2, data_window: &crate::DataWindow) -> Option<String> {
+    pub fn get_bar_info(&self, mouse_pos: egui::Pos2, data_window: &DataWindow) -> Option<String> {
         let rect = match self.rect {
             Some(rect) => rect,
             None => return None, // No chart area defined
@@ -68,7 +69,7 @@ impl Crosshair {
     pub fn highlight_bar(&self, 
         ui: &mut egui::Ui, 
         rect: Rect,
-        data_window: &crate::DataWindow, 
+        data_window: &DataWindow, 
         mouse_pos: egui::Pos2,
         scale_price: &impl Fn(f64) -> f32,) {
         let painter = ui.painter();
@@ -119,7 +120,7 @@ impl Crosshair {
         );
     }
 
-    pub fn draw(&mut self, ui: &mut egui::Ui, rect: Rect, _data_window: &crate::DataWindow, mouse_pos: egui::Pos2) {
+    pub fn draw(&mut self, ui: &mut egui::Ui, rect: Rect, _data_window: &DataWindow, mouse_pos: egui::Pos2) {
         self.rect = Some(rect);
         let painter = ui.painter();
         let color = egui::Color32::from_rgba_unmultiplied(255, 255, 255, 100);

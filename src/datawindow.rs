@@ -1,9 +1,23 @@
 use crate::rsi::WilderRSI;
 use crate::db::Database;
-use crate::DataWindow;
+use crate::timeframe;
+use crate::fetch::KLine;
+use crate::timeframe::Bar;
 use chrono::Timelike;
 use std::error::Error;
-use crate::timeframe;
+
+#[derive(Debug)]
+pub struct DataWindow {
+pub bars: Vec<Bar>,
+pub visible_range: (i64, i64),
+pub price: (f64, f64),
+pub min_indexes: Option<Vec<usize>>,
+pub max_indexes: Option<Vec<usize>>,
+pub recent_data: Vec<KLine>,
+pub timeframe_remainder: Vec<KLine>,
+pub volume_height_ratio: f32,
+pub pixel_offset: f32,
+}
 
 pub const BLOCK_SIZE: usize = 1000;
 
@@ -26,10 +40,6 @@ impl DataWindow {
         let mut current_block_start = timeframe::Timeframe::get_dbtimestamp(start_time);
         let period = 14;
         let mut rsi_calculator = WilderRSI::new(period);
-        /*for data_point in &ohlc_data {
-            let check_result = rsi_calculator.process_ohlcv(data_point);
-            println!("{}", check_result);
-        }*/
         while current_block_start <= end_time {
             println!("Get block from db, timestamp: {}", current_block_start);
             if let Some(mut block) = db.get_block(symbol, current_block_start)? {

@@ -1,11 +1,11 @@
 // app_ui.rs
 use eframe::{Frame, egui};
-use crate::{TradingApp, axes, hlcbars, volbars};
+use crate::{interactivegui::InteractiveGui, axes, hlcbars, volbars};
 use crate::axes_util;
 use crate::settings;
 use std::time::{Duration, Instant};
 
-impl eframe::App for TradingApp {
+impl eframe::App for InteractiveGui {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut Frame) {
         let frame_start_time = Instant::now();
         egui::CentralPanel::default().show(ctx, |ui| {
