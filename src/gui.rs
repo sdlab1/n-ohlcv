@@ -1,4 +1,4 @@
-// app_ui.rs
+// gui.rs
 use eframe::{Frame, egui};
 use crate::{interactivegui::InteractiveGui, axes, hlcbars, volbars};
 use crate::axes_util;

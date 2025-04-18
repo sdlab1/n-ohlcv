@@ -1,5 +1,4 @@
 use crate::interactivegui::InteractiveGui;
-mod interactivegui;
 mod timeframe;
 mod datawindow;
 mod settings;
@@ -11,7 +10,8 @@ mod compress;
 mod db;
 mod fetch;
 mod gpu_backend;
-mod app_ui;
+mod gui;
+mod interactivegui;
 mod crosshair;
 mod performance;
 mod rsi;

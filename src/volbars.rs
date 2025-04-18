@@ -1,7 +1,8 @@
 // volbars.rs
+use crate::datawindow::DataWindow;
 use eframe::egui;
 
-pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &crate::DataWindow) {
+pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &DataWindow) {
     let painter = ui.painter();
     let up_color = egui::Color32::from_rgb(100, 180, 100);
     let down_color = egui::Color32::from_rgb(180, 100, 100);
