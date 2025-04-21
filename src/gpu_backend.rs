@@ -1,6 +1,6 @@
 // src/gpu_backend.rs
 use eframe;
-use wgpu::Instance;
+use eframe::wgpu::Instance;
 
 pub fn native_options() -> eframe::NativeOptions {
     eframe::NativeOptions { // eframe = "0.31.1"
@@ -21,7 +21,7 @@ pub fn native_options() -> eframe::NativeOptions {
 pub async fn log_gpu_api() {
     let instance = Instance::default();
     let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions::default())
+        .request_adapter(&eframe::wgpu::RequestAdapterOptions::default())
         .await
         .expect("Failed to find a suitable GPU adapter!");
     println!("[GPU] Backend: {:?}", adapter.get_info().backend);

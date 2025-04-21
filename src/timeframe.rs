@@ -2,7 +2,7 @@ use crate::rsi;
 use crate::db::Database;
 use crate::fetch::{KLine, PRICE_MULTIPLIER};
 use crate::datawindow::DataWindow;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use reqwest::blocking::Client;
 use std::error::Error;
 use std::thread;
@@ -113,7 +113,7 @@ impl Timeframe {
                 current_low = current_low.min(price_low);
                 current_volume += kline.volume;
             }
-            let rsi_val = rsi_calculator.add_price(
+            let _rsi_val = rsi_calculator.add_price(
                 current_open_time,
                  kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32));
             /*(&

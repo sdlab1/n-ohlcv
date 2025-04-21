@@ -1,4 +1,5 @@
 use crate::interactivegui::InteractiveGui;
+
 mod timeframe;
 mod datawindow;
 mod settings;
@@ -17,6 +18,8 @@ mod performance;
 mod rsi;
 
 fn main() -> eframe::Result<()> {
+    
+
     // Запускаем приложение eframe
     println!("Running eframe::run_native");
     eframe::run_native(

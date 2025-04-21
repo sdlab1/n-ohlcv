@@ -110,7 +110,7 @@ impl eframe::App for InteractiveGui {
                         ctx.request_repaint();
                     }
                 }
-                                let scroll_delta = ctx.input(|i| i.raw_scroll_delta.y);
+                let scroll_delta = ctx.input(|i| i.raw_scroll_delta.y);
                 if scroll_delta != 0.0 {
                     self.zoom(scroll_delta as f64 * 0.1);
                 }
