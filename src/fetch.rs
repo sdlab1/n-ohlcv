@@ -3,7 +3,6 @@ use serde;
 use serde_json;
 use std::error::Error;
 
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, bincode::Encode, bincode::Decode)]
 pub struct KLine {
     pub open_time: i64,
@@ -41,7 +40,8 @@ pub fn fetch_klines(
         return Err(format!("API error: {}", response.status()).into());
     }
 
-    let klines = response.json::<Vec<Vec<serde_json::Value>>>()?
+    let klines = response
+        .json::<Vec<Vec<serde_json::Value>>>()?
         .into_iter()
         .map(|k| {
             let open_time = k[0].as_i64().unwrap_or(0);
@@ -65,17 +65,31 @@ pub fn fetch_klines(
 }
 
 fn convert_price_to_u64(price_str: &str) -> u64 {
-    let parts: Vec<&str> = price_str.split('.').collect();
-    let integer_part = parts[0];
-    let decimal_part = if parts.len() > 1 { parts[1] } else { "" };
-    
-    let mut result = integer_part.to_string();
-    if PRICE_MULTIPLIER > 0 {
-        let decimals_to_take = decimal_part.chars().take(PRICE_MULTIPLIER as usize).collect::<String>();
-        let padding = "0".repeat((PRICE_MULTIPLIER as usize).saturating_sub(decimals_to_take.len()));
-        result += &decimals_to_take;
-        result += &padding;
+    let mut int_part: u64 = 0;
+    let mut frac_part: u64 = 0;
+    let mut frac_len = 0usize;
+    let mut seen_dot = false;
+
+    for b in price_str.as_bytes() {
+        match *b {
+            b'0'..=b'9' => {
+                let d = (b - b'0') as u64;
+                if !seen_dot {
+                    int_part = int_part * 10 + d;
+                } else if frac_len < PRICE_MULTIPLIER as usize {
+                    frac_part = frac_part * 10 + d;
+                    frac_len += 1;
+                } // лишние цифры дробной части просто игнорируем
+            }
+            b'.' => seen_dot = true,
+            _ => break, // неожиданный символ → останов
+        }
     }
-    
-    result.parse::<u64>().unwrap_or(0)
+
+    // добиваем нулями, если дробной части меньше
+    if frac_len < PRICE_MULTIPLIER as usize {
+        frac_part *= 10u64.pow((PRICE_MULTIPLIER - frac_len as u32) as u32);
+    }
+
+    int_part * 10u64.pow(PRICE_MULTIPLIER) + frac_part
 }
