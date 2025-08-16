@@ -1,7 +1,7 @@
 // db.rs
-use sled;
-use crate::fetch::KLine;
 use crate::compress;
+use crate::fetch::KLine;
+use sled;
 use std::error::Error;
 
 pub struct Database {
@@ -13,7 +13,7 @@ impl Database {
         let config = sled::Config::default()
             .path(path)
             .cache_capacity(4 * 1024 * 1024)
-            .use_compression(false); 
+            .use_compression(false);
         config.open().map(|db| Self { db })
     }
 
@@ -25,26 +25,22 @@ impl Database {
     ) -> Result<(), Box<dyn Error>> {
         let key = format!("{}_{}", symbol, timestamp);
         let compressed = compress::compress_klines(data)?;
+        let last_key = format!("last_{}", symbol);
+        let key_bytes = key.as_bytes();
+        let last_ts_bytes = timestamp.to_be_bytes();
         self.db.transaction(|tx| {
-            // First insert
-            match tx.insert(key.as_bytes(), compressed.clone()) {
-                Ok(_) => {},
-                Err(e) => return Err(sled::transaction::ConflictableTransactionError::Abort(e)),
-            }
-            
-            // Second insert
-            match tx.insert(format!("last_{}", symbol).as_bytes(), &timestamp.to_be_bytes()) {
-                Ok(_) => {},
-                Err(e) => return Err(sled::transaction::ConflictableTransactionError::Abort(e)),
-            }
-            
-            Ok(())
+            tx.insert(key_bytes, &compressed[..])?;
+            tx.insert(last_key.as_bytes(), &last_ts_bytes)?;
+            Ok::<(), sled::transaction::ConflictableTransactionError<sled::Error>>(())
         })?;
-        
         Ok(())
     }
 
-    pub fn get_block(&self, symbol: &str, timestamp: i64) -> Result<Option<Vec<KLine>>, Box<dyn std::error::Error>> {
+    pub fn get_block(
+        &self,
+        symbol: &str,
+        timestamp: i64,
+    ) -> Result<Option<Vec<KLine>>, Box<dyn std::error::Error>> {
         let key = format!("{}_{}", symbol, timestamp);
         match self.db.get(key.as_bytes())? {
             Some(data) => Ok(Some(compress::decompress_klines(&data)?)),
