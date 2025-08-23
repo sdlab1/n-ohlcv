@@ -1,24 +1,23 @@
-use std::time::Instant;
-use chrono::{Duration, Utc};
-use crate::settings::*;
-use crate::performance::FrameInfo;
+use crate::crosshair;
 use crate::datawindow::DataWindow;
 use crate::db::Database;
-use crate::crosshair;
 use crate::gpu_backend;
-
+use crate::performance::FrameInfo;
+use crate::settings::*;
+use chrono::{Duration, Utc};
+use std::time::Instant;
 
 pub struct InteractiveGui {
     db: Database,
-pub data_window: DataWindow,
-pub timeframe: i32,
-pub status_messages: Vec<String>,
-pub status_messages_last_ts: Option<Instant>,
-pub symbol: String,
-pub show_candles: bool,
-pub measure_frame_time: bool,
-pub crosshair: crosshair::Crosshair,
-pub frame_info: FrameInfo,
+    pub data_window: DataWindow,
+    pub timeframe: i32,
+    pub status_messages: Vec<String>,
+    pub status_messages_last_ts: Option<Instant>,
+    pub symbol: String,
+    pub show_candles: bool,
+    pub measure_frame_time: bool,
+    pub crosshair: crosshair::Crosshair,
+    pub frame_info: FrameInfo,
 }
 
 impl InteractiveGui {
@@ -45,14 +44,18 @@ impl InteractiveGui {
             pixel_offset: 0.0,
             min_indexes: None,
             max_indexes: None,
+            cached_visible_range: None,
+            cached_max_volume: None,
         };
         let now = chrono::Utc::now().timestamp_millis();
         let start_time = now - chrono::Duration::days(INITIAL_LOAD_DAYS).num_milliseconds();
         let db = Database::new("ohlcv_db").expect("Error initializing DB");
         // loading initial data window
-        if let Err(e) = DataWindow::get_data_window(&db, symbol, start_time, now, timeframe, &mut data_window) {
+        if let Err(e) =
+            DataWindow::get_data_window(&db, symbol, start_time, now, timeframe, &mut data_window)
+        {
             eprintln!("Unable to get data window: {}", e);
-        }  
+        }
         Self {
             db,
             data_window,
@@ -115,7 +118,10 @@ impl InteractiveGui {
         ) {
             self.message_add(format!("Ошибка обновления данных: {}", e));
         } else {
-            self.message_add(format!("Обновлено отображение: {} баров", self.data_window.bars.len()));
+            self.message_add(format!(
+                "Обновлено отображение: {} баров",
+                self.data_window.bars.len()
+            ));
         }
     }
 }

@@ -1,15 +1,21 @@
 // crosshair.rs
-use eframe::egui::Rect;
-use chrono::{DateTime, Utc};
 use crate::datawindow::DataWindow;
+use chrono::{DateTime, Utc};
+use eframe::egui::Rect;
 
 #[derive(Default)]
 pub struct Crosshair {
     rect: Option<egui::Rect>, // Private field for chart area
+    cached_bar_index: Option<usize>,
+    cached_bar_info: Option<String>,
 }
 
 impl Crosshair {
-    pub fn get_bar_info(&self, mouse_pos: egui::Pos2, data_window: &DataWindow) -> Option<String> {
+    pub fn get_bar_info(
+        &mut self,
+        mouse_pos: egui::Pos2,
+        data_window: &DataWindow,
+    ) -> Option<String> {
         let rect = match self.rect {
             Some(rect) => rect,
             None => return None, // No chart area defined
@@ -33,6 +39,14 @@ impl Crosshair {
         if index >= visible_slice.len() {
             return None;
         }
+        // Check if we already have this bar info cached
+        let actual_index = start as usize + index;
+        if let Some(cached_index) = self.cached_bar_index {
+            if cached_index == actual_index {
+                return self.cached_bar_info.clone();
+            }
+        }
+
         let bar = &visible_slice[index];
 
         let dt = DateTime::<Utc>::from_timestamp_millis(bar.time).unwrap_or(Utc::now());
@@ -55,7 +69,7 @@ impl Crosshair {
             };
             format!("{:.*}{}", decimals, value, unit)
         };
-        Some(format!(
+        let bar_info = format!(
             "{} | o {:.2} h {:.2} l {:.2} c {:.2} v {}",
             dt.format("%H:%M"),
             bar.open,
@@ -63,20 +77,29 @@ impl Crosshair {
             bar.low,
             bar.close,
             volume_str
-        ))
+        );
+
+        // Cache the result
+        self.cached_bar_index = Some(actual_index);
+        self.cached_bar_info = Some(bar_info.clone());
+
+        Some(bar_info)
     }
 
-    pub fn highlight_bar(&self, 
-        ui: &mut egui::Ui, 
+    pub fn highlight_bar(
+        &self,
+        ui: &mut egui::Ui,
         rect: Rect,
-        data_window: &DataWindow, 
+        data_window: &DataWindow,
         mouse_pos: egui::Pos2,
-        scale_price: &impl Fn(f64) -> f32,) {
+        scale_price: &impl Fn(f64) -> f32,
+    ) {
         let painter = ui.painter();
         let highlight_color = egui::Color32::from_rgb(100, 100, 100);
 
         let volume_height = rect.height() * data_window.volume_height_ratio;
-        let price_rect = egui::Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.max.y - volume_height));
+        let price_rect =
+            egui::Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.max.y - volume_height));
 
         let (start, end) = data_window.visible_range;
         if start >= end || end as usize > data_window.bars.len() {
@@ -103,35 +126,48 @@ impl Crosshair {
         let count = visible_slice.len() as f32;
         let bar_width = (price_rect.width() / count).min(5.0);
         let i = index as f32;
-        let x_right = price_rect.left() + ((i + 1.0) / count) * price_rect.width() + data_window.pixel_offset;
+        let x_right =
+            price_rect.left() + ((i + 1.0) / count) * price_rect.width() + data_window.pixel_offset;
         let x_left = x_right - bar_width;
         let high_y = scale_price(bar.high);
         let low_y = scale_price(bar.low);
 
         let expanded_rect = egui::Rect::from_min_max(
             egui::pos2(x_left - 0.5, high_y - 0.5), // shift left top by 0.5px
-            egui::pos2(x_right + 0.5, low_y + 0.5),  // shift right bottom by 0.5px
+            egui::pos2(x_right + 0.5, low_y + 0.5), // shift right bottom by 0.5px
         );
         // draw filled rect
         painter.rect_filled(
             expanded_rect,
             1.0, // round angles
-            highlight_color
+            highlight_color,
         );
     }
 
-    pub fn draw(&mut self, ui: &mut egui::Ui, rect: Rect, _data_window: &DataWindow, mouse_pos: egui::Pos2) {
+    pub fn draw(
+        &mut self,
+        ui: &mut egui::Ui,
+        rect: Rect,
+        _data_window: &DataWindow,
+        mouse_pos: egui::Pos2,
+    ) {
         self.rect = Some(rect);
         let painter = ui.painter();
         let color = egui::Color32::from_rgba_unmultiplied(255, 255, 255, 100);
 
         painter.line_segment(
-            [egui::pos2(mouse_pos.x, rect.top()), egui::pos2(mouse_pos.x, rect.bottom())],
-            (1.0, color)
+            [
+                egui::pos2(mouse_pos.x, rect.top()),
+                egui::pos2(mouse_pos.x, rect.bottom()),
+            ],
+            (1.0, color),
         );
         painter.line_segment(
-            [egui::pos2(rect.left(), mouse_pos.y), egui::pos2(rect.right(), mouse_pos.y)],
-            (1.0, color)
+            [
+                egui::pos2(rect.left(), mouse_pos.y),
+                egui::pos2(rect.right(), mouse_pos.y),
+            ],
+            (1.0, color),
         );
     }
 }

@@ -3,7 +3,6 @@ use serde;
 use serde_json;
 use std::error::Error;
 
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, bincode::Encode, bincode::Decode)]
 pub struct KLine {
     pub open_time: i64,
@@ -41,7 +40,8 @@ pub fn fetch_klines(
         return Err(format!("API error: {}", response.status()).into());
     }
 
-    let klines = response.json::<Vec<Vec<serde_json::Value>>>()?
+    let klines = response
+        .json::<Vec<Vec<serde_json::Value>>>()?
         .into_iter()
         .map(|k| {
             let open_time = k[0].as_i64().unwrap_or(0);
@@ -65,17 +65,32 @@ pub fn fetch_klines(
 }
 
 fn convert_price_to_u64(price_str: &str) -> u64 {
-    let parts: Vec<&str> = price_str.split('.').collect();
-    let integer_part = parts[0];
-    let decimal_part = if parts.len() > 1 { parts[1] } else { "" };
-    
-    let mut result = integer_part.to_string();
-    if PRICE_MULTIPLIER > 0 {
-        let decimals_to_take = decimal_part.chars().take(PRICE_MULTIPLIER as usize).collect::<String>();
-        let padding = "0".repeat((PRICE_MULTIPLIER as usize).saturating_sub(decimals_to_take.len()));
-        result += &decimals_to_take;
-        result += &padding;
+    if let Some(dot_pos) = price_str.find('.') {
+        let integer_part = &price_str[..dot_pos];
+        let decimal_part = &price_str[dot_pos + 1..];
+
+        let mut result = String::with_capacity(integer_part.len() + PRICE_MULTIPLIER as usize);
+        result.push_str(integer_part);
+
+        if PRICE_MULTIPLIER > 0 {
+            let decimals_to_take = decimal_part
+                .chars()
+                .take(PRICE_MULTIPLIER as usize)
+                .collect::<String>();
+            let padding =
+                "0".repeat((PRICE_MULTIPLIER as usize).saturating_sub(decimals_to_take.len()));
+            result.push_str(&decimals_to_take);
+            result.push_str(&padding);
+        }
+
+        result.parse::<u64>().unwrap_or(0)
+    } else {
+        // No decimal point, just integer
+        let mut result = String::with_capacity(price_str.len() + PRICE_MULTIPLIER as usize);
+        result.push_str(price_str);
+        if PRICE_MULTIPLIER > 0 {
+            result.push_str(&"0".repeat(PRICE_MULTIPLIER as usize));
+        }
+        result.parse::<u64>().unwrap_or(0)
     }
-    
-    result.parse::<u64>().unwrap_or(0)
 }

@@ -1,22 +1,24 @@
-use crate::rsi::WilderRSI;
 use crate::db::Database;
-use crate::timeframe;
 use crate::fetch::KLine;
+use crate::rsi::WilderRSI;
+use crate::timeframe;
 use crate::timeframe::Bar;
 use chrono::Timelike;
 use std::error::Error;
 
 #[derive(Debug)]
 pub struct DataWindow {
-pub bars: Vec<Bar>,
-pub visible_range: (i64, i64),
-pub price: (f64, f64),
-pub min_indexes: Option<Vec<usize>>,
-pub max_indexes: Option<Vec<usize>>,
-pub recent_data: Vec<KLine>,
-pub timeframe_remainder: Vec<KLine>,
-pub volume_height_ratio: f32,
-pub pixel_offset: f32,
+    pub bars: Vec<Bar>,
+    pub visible_range: (i64, i64),
+    pub price: (f64, f64),
+    pub min_indexes: Option<Vec<usize>>,
+    pub max_indexes: Option<Vec<usize>>,
+    pub recent_data: Vec<KLine>,
+    pub timeframe_remainder: Vec<KLine>,
+    pub volume_height_ratio: f32,
+    pub pixel_offset: f32,
+    cached_visible_range: Option<(i64, i64)>,
+    cached_max_volume: Option<f64>,
 }
 
 pub const BLOCK_SIZE: usize = 1000;
@@ -52,8 +54,12 @@ impl DataWindow {
                     }
                 }
                 let converted = timeframe::Timeframe::convert_to_timeframe(
-                    block, timeframe_minutes, false, 
-                    data_window, &mut rsi_calculator)?;
+                    block,
+                    timeframe_minutes,
+                    false,
+                    data_window,
+                    &mut rsi_calculator,
+                )?;
                 println!(
                     "Block at {} has {} bars after conversion, remainder.len: {}",
                     current_block_start,
@@ -67,17 +73,24 @@ impl DataWindow {
             current_block_start += BLOCK_SIZE as i64 * 60_000;
         }
         println!("bars.len: {}", bars.len());
-        println!("data_window.recent_data (minutes): {}", data_window.recent_data.len());
+        println!(
+            "data_window.recent_data (minutes): {}",
+            data_window.recent_data.len()
+        );
         bars.extend(timeframe::Timeframe::convert_to_timeframe(
-            data_window.recent_data.to_vec(), timeframe_minutes, true, 
-            data_window, &mut rsi_calculator)?);
+            data_window.recent_data.to_vec(),
+            timeframe_minutes,
+            true,
+            data_window,
+            &mut rsi_calculator,
+        )?);
         data_window.bars = bars;
         println!("data_window.bars.len: {}", data_window.bars.len());
         let len = data_window.bars.len() as i64;
         let window_size = 200.min(data_window.bars.len()) as i64;
         data_window.visible_range = (
             (len - window_size).max(0), // start
-            len                         // end
+            len,                        // end
         );
         data_window.build_extrema_indexes();
         data_window.update_price_range_extrema();
@@ -88,12 +101,20 @@ impl DataWindow {
     }
 
     pub fn update_price_range_extrema(&mut self) {
+        // Check if we need to recalculate
+        if let Some(cached_range) = self.cached_visible_range {
+            if cached_range == self.visible_range {
+                return; // No change, use cached values
+            }
+        }
+
         let (start, end) = self.visible_range;
         let start = start.max(0) as usize;
         let end = end.min(self.bars.len() as i64) as usize;
 
         if start >= end {
             self.price = (0.0, 1.0);
+            self.cached_visible_range = Some(self.visible_range);
             return;
         }
 
@@ -140,19 +161,46 @@ impl DataWindow {
         } else {
             (min, max)
         };
+
+        // Cache the range we just calculated for
+        self.cached_visible_range = Some(self.visible_range);
+    }
+
+    pub fn get_max_volume(&mut self) -> f64 {
+        // Check if we need to recalculate max volume
+        if let Some(cached_range) = self.cached_visible_range {
+            if cached_range == self.visible_range {
+                if let Some(max_vol) = self.cached_max_volume {
+                    return max_vol;
+                }
+            }
+        }
+
+        let (start, end) = self.visible_range;
+        let start = start.max(0) as usize;
+        let end = end.min(self.bars.len() as i64) as usize;
+
+        if start >= end {
+            self.cached_max_volume = Some(0.0);
+            return 0.0;
+        }
+
+        let max_volume = self.bars[start..end]
+            .iter()
+            .map(|b| b.volume)
+            .fold(0.0, f64::max);
+
+        self.cached_max_volume = Some(max_volume);
+        max_volume
     }
 
     fn build_extrema_indexes(&mut self) {
         let mut mins: Vec<usize> = (0..self.bars.len()).collect();
         let mut maxs: Vec<usize> = (0..self.bars.len()).collect();
 
-        mins.sort_unstable_by(|&a, &b| {
-            self.bars[a].low.partial_cmp(&self.bars[b].low).unwrap()
-        });
+        mins.sort_unstable_by(|&a, &b| self.bars[a].low.partial_cmp(&self.bars[b].low).unwrap());
 
-        maxs.sort_unstable_by(|&a, &b| {
-            self.bars[b].high.partial_cmp(&self.bars[a].high).unwrap()
-        });
+        maxs.sort_unstable_by(|&a, &b| self.bars[b].high.partial_cmp(&self.bars[a].high).unwrap());
 
         self.min_indexes = Some(mins);
         self.max_indexes = Some(maxs);
