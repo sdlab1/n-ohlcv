@@ -65,32 +65,35 @@ pub fn fetch_klines(
 }
 
 fn convert_price_to_u64(price_str: &str) -> u64 {
+    // A multiplier to convert the decimal part to an integer.
+    // For PRICE_MULTIPLIER = 2, this is 100.
+    const MULT: u64 = 10u64.pow(PRICE_MULTIPLIER);
+
     if let Some(dot_pos) = price_str.find('.') {
-        let integer_part = &price_str[..dot_pos];
-        let decimal_part = &price_str[dot_pos + 1..];
+        // Integer part
+        let integer_part = price_str[..dot_pos].parse::<u64>().unwrap_or(0);
 
-        let mut result = String::with_capacity(integer_part.len() + PRICE_MULTIPLIER as usize);
-        result.push_str(integer_part);
+        // Decimal part
+        let decimal_part_str = &price_str[dot_pos + 1..];
+        // Take only the required number of decimals
+        let num_decimals = decimal_part_str.len().min(PRICE_MULTIPLIER as usize);
+        let decimal_part = if num_decimals > 0 {
+            decimal_part_str[..num_decimals].parse::<u64>().unwrap_or(0)
+        } else {
+            0
+        };
 
-        if PRICE_MULTIPLIER > 0 {
-            let decimals_to_take = decimal_part
-                .chars()
-                .take(PRICE_MULTIPLIER as usize)
-                .collect::<String>();
-            let padding =
-                "0".repeat((PRICE_MULTIPLIER as usize).saturating_sub(decimals_to_take.len()));
-            result.push_str(&decimals_to_take);
-            result.push_str(&padding);
-        }
+        // If the provided decimal part is shorter, pad with zeros mathematically.
+        // e.g., if price is "1.2" and PRICE_MULTIPLIER is 2,
+        // decimal_part is 2, num_decimals is 1.
+        // We need to make it 20. So, 2 * 10^(2-1) = 20.
+        let padding_power = (PRICE_MULTIPLIER as usize).saturating_sub(num_decimals);
+        let adjusted_decimal = decimal_part * 10u64.pow(padding_power as u32);
 
-        result.parse::<u64>().unwrap_or(0)
+        integer_part * MULT + adjusted_decimal
     } else {
-        // No decimal point, just integer
-        let mut result = String::with_capacity(price_str.len() + PRICE_MULTIPLIER as usize);
-        result.push_str(price_str);
-        if PRICE_MULTIPLIER > 0 {
-            result.push_str(&"0".repeat(PRICE_MULTIPLIER as usize));
-        }
-        result.parse::<u64>().unwrap_or(0)
+        // No decimal point, just integer.
+        // e.g., if price is "12" and PRICE_MULTIPLIER is 2, result is 1200.
+        price_str.parse::<u64>().unwrap_or(0) * MULT
     }
 }

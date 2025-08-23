@@ -1,19 +1,14 @@
 //axes_util.rs
-use crate::{settings, datawindow::DataWindow};
-use chrono::{DateTime, Utc, Datelike, Timelike};
+use crate::{datawindow::DataWindow, settings};
+use chrono::{DateTime, Datelike, Timelike, Utc};
 
-pub fn create_scale_price_fn(
-    data_window: &DataWindow,
-    rect: egui::Rect,
-) -> impl Fn(f64) -> f32 {
+pub fn create_scale_price_fn(data_window: &DataWindow, rect: egui::Rect) -> impl Fn(f64) -> f32 {
     let (min_price, max_price) = data_window.price;
     let range = (max_price - min_price).max(1e-9);
     let height = rect.height();
     let bottom = rect.bottom();
 
-    move |price: f64| -> f32 {
-        bottom - ((price - min_price) / range) as f32 * height
-    }
+    move |price: f64| -> f32 { bottom - ((price - min_price) / range) as f32 * height }
 }
 
 pub fn format_price(price: f64) -> String {
@@ -26,12 +21,19 @@ pub fn format_price(price: f64) -> String {
         (price, "", 2)
     };
 
-    let tolerance = if suffix.is_empty() { 1e-9 } else { 10f64.powi(-(decimals as i32 + 1)) };
+    let tolerance = if suffix.is_empty() {
+        1e-9
+    } else {
+        10f64.powi(-(decimals as i32 + 1))
+    };
     let is_round = value.fract().abs() < tolerance;
 
     if is_round {
         format!("{:.0}{}", value, suffix)
-    } else if suffix.is_empty() && abs_price > 1.0 && value.fract().abs() < settings::PRICE_FRACTION_THRESHOLD {
+    } else if suffix.is_empty()
+        && abs_price > 1.0
+        && value.fract().abs() < settings::PRICE_FRACTION_THRESHOLD
+    {
         format!("{:.0}", value)
     } else {
         format!("{:.prec$}{}", value, suffix, prec = decimals)
@@ -52,7 +54,9 @@ pub fn format_price_high_precision(price: f64) -> String {
 
 pub fn nice_range(min: f64, max: f64, ticks: usize) -> (f64, f64, f64) {
     let range = (max - min).max(1e-9);
-    if range <= 1e-9 { return (min, max, 1.0); }
+    if range <= 1e-9 {
+        return (min, max, 1.0);
+    }
 
     let tick_spacing = range / (ticks.max(2) - 1) as f64;
     let magnitude = 10f64.powf(tick_spacing.log10().floor());
@@ -84,11 +88,8 @@ pub fn generate_price_labels(
     height_limit_bottom: f32,
 ) -> Vec<(f64, String, f32)> {
     let price_range = (max - min).max(1e-9);
-    let (nice_min, nice_max, tick_spacing) = nice_range(
-        min - price_range * 0.05,
-        max + price_range * 0.05,
-        6,
-    );
+    let (nice_min, nice_max, tick_spacing) =
+        nice_range(min - price_range * 0.05, max + price_range * 0.05, 6);
 
     if nice_max <= nice_min || tick_spacing <= 1e-9 {
         return vec![];
@@ -109,33 +110,45 @@ pub fn generate_price_labels(
     labels
 }
 
-pub fn deduplicate_price_labels(labels: Vec<(f64, String, f32)>) -> Vec<(f64, String, f32)> {
+pub fn deduplicate_price_labels(labels: &mut Vec<(f64, String, f32)>) {
     if labels.len() < 2 {
-        return labels;
+        return;
     }
 
-    let mut final_labels = labels.clone();
-    let mut changed = false;
+    let mut needs_update = vec![false; labels.len()];
+    let mut has_duplicates = false;
 
-    for i in 1..final_labels.len() {
-        if final_labels[i].1 == final_labels[i - 1].1 {
-            final_labels[i - 1].1 = format_price_high_precision(final_labels[i - 1].0);
-            final_labels[i].1 = format_price_high_precision(final_labels[i].0);
-            changed = true;
+    for i in 1..labels.len() {
+        if labels[i].1 == labels[i - 1].1 {
+            needs_update[i] = true;
+            needs_update[i - 1] = true;
+            has_duplicates = true;
         }
     }
 
-    if changed {
-        final_labels
-    } else {
-        labels
+    if has_duplicates {
+        for i in 0..labels.len() {
+            if needs_update[i] {
+                labels[i].1 = format_price_high_precision(labels[i].0);
+            }
+        }
     }
 }
 
 pub fn choose_time_interval(time_span_ms: i64, target_lines: usize) -> i64 {
     let intervals = [
-        1_000, 60_000, 300_000, 900_000, 1_800_000, 3_600_000, 14_400_000,
-        43_200_000, 86_400_000, 604_800_000, 2_592_000_000, 31_536_000_000,
+        1_000,
+        60_000,
+        300_000,
+        900_000,
+        1_800_000,
+        3_600_000,
+        14_400_000,
+        43_200_000,
+        86_400_000,
+        604_800_000,
+        2_592_000_000,
+        31_536_000_000,
     ];
 
     let mut interval = intervals
@@ -155,7 +168,13 @@ pub fn choose_time_interval(time_span_ms: i64, target_lines: usize) -> i64 {
     interval.max(1000)
 }
 
-pub fn format_time_label(dt: DateTime<Utc>, interval_ms: i64, has_two_years: bool, has_two_months: bool, has_two_days: bool) -> String {
+pub fn format_time_label(
+    dt: DateTime<Utc>,
+    interval_ms: i64,
+    has_two_years: bool,
+    has_two_months: bool,
+    has_two_days: bool,
+) -> String {
     match interval_ms {
         i if i >= 31_536_000_000 && has_two_years => dt.format("%Y").to_string(),
         i if i >= 2_592_000_000 && has_two_months => dt.format("%b").to_string(),
