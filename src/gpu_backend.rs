@@ -3,19 +3,21 @@ use eframe;
 use eframe::wgpu::Instance;
 
 pub fn native_options() -> eframe::NativeOptions {
-    eframe::NativeOptions { // eframe = "0.31.1"
+    eframe::NativeOptions {
+        // eframe = "0.31.1"
         viewport: egui::ViewportBuilder::default()
-        .with_inner_size([1920.0, 1080.0])  // Принудительный размер
-        .with_position([0.0, 0.0])          // В верхний левый угол
-        .with_decorations(false),           // Скрыть рамки
-            renderer: eframe::Renderer::Wgpu,
-            hardware_acceleration: eframe::HardwareAcceleration::Preferred,
-            vsync: true,
-            multisampling: 0,
-            depth_buffer: 0,
-            stencil_buffer: 0,
-            run_and_return: true,
-            ..Default::default()
+            .with_fullscreen(true)
+            //.with_inner_size([1920.0, 1080.0])  // maximized is PAIN. Keep calm and use fullscreen
+            .with_position([0.0, 0.0]) // В верхний левый угол
+            .with_decorations(false), // Скрыть рамки
+        renderer: eframe::Renderer::Wgpu,
+        hardware_acceleration: eframe::HardwareAcceleration::Preferred,
+        vsync: true,
+        multisampling: 0,
+        depth_buffer: 0,
+        stencil_buffer: 0,
+        run_and_return: true,
+        ..Default::default()
     }
 }
 pub async fn log_gpu_api() {
