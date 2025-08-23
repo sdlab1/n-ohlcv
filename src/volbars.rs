@@ -16,13 +16,13 @@ pub fn draw(ui: &mut egui::Ui, rect: egui::Rect, data_window: &mut DataWindow) {
         return;
     }
 
-    let visible_slice = &data_window.bars[start as usize..end as usize];
-    if visible_slice.is_empty() {
+    let max_volume = data_window.get_max_volume();
+    if max_volume <= 0.0 {
         return;
     }
 
-    let max_volume = data_window.get_max_volume();
-    if max_volume <= 0.0 {
+    let visible_slice = &data_window.bars[start as usize..end as usize];
+    if visible_slice.is_empty() {
         return;
     }
 

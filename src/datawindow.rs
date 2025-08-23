@@ -17,8 +17,8 @@ pub struct DataWindow {
     pub timeframe_remainder: Vec<KLine>,
     pub volume_height_ratio: f32,
     pub pixel_offset: f32,
-    cached_visible_range: Option<(i64, i64)>,
-    cached_max_volume: Option<f64>,
+    pub cached_visible_range: Option<(i64, i64)>,
+    pub cached_max_volume: Option<f64>,
 }
 
 pub const BLOCK_SIZE: usize = 1000;
