@@ -1,5 +1,6 @@
 // crosshair.rs
 use crate::datawindow::DataWindow;
+use crate::drawing_util; // Добавлен импорт для drawing_util
 use chrono::{DateTime, Utc};
 use eframe::egui::Rect;
 
@@ -11,23 +12,21 @@ pub struct Crosshair {
 }
 
 impl Crosshair {
-    pub fn get_bar_info(
-        &mut self,
+    // Вспомогательная функция для получения бара под курсором мыши
+    fn get_bar_under_cursor_data<'a>(
+        &self,
         mouse_pos: egui::Pos2,
-        data_window: &DataWindow,
-    ) -> Option<String> {
-        let rect = match self.rect {
-            Some(rect) => rect,
-            None => return None, // No chart area defined
-        };
+        data_window: &'a DataWindow,
+        chart_rect: egui::Rect, // Передаем релевантный rect графика (price_rect)
+    ) -> Option<(usize, &'a crate::timeframe::Bar)> {
         let (start, end) = data_window.visible_range;
         let visible_slice = &data_window.bars.get(start as usize..end as usize)?;
         if visible_slice.is_empty() {
             return None;
         }
 
-        let chart_left = rect.left();
-        let chart_width = rect.width();
+        let chart_left = chart_rect.left();
+        let chart_width = chart_rect.width();
 
         let adjusted_x = mouse_pos.x - data_window.pixel_offset;
         let normalized_x = (adjusted_x - chart_left) / chart_width;
@@ -39,15 +38,37 @@ impl Crosshair {
         if index >= visible_slice.len() {
             return None;
         }
-        // Check if we already have this bar info cached
         let actual_index = start as usize + index;
+        Some((actual_index, &visible_slice[index]))
+    }
+
+    pub fn get_bar_info(
+        &mut self,
+        mouse_pos: egui::Pos2,
+        data_window: &DataWindow,
+    ) -> Option<String> {
+        let chart_area_rect = match self.rect {
+            Some(rect) => rect,
+            None => return None, // Область графика не определена
+        };
+
+        // Определяем price_rect для информации о баре (исключая область объема)
+        let volume_height = chart_area_rect.height() * data_window.volume_height_ratio;
+        let price_rect = egui::Rect::from_min_max(
+            chart_area_rect.min,
+            egui::pos2(chart_area_rect.max.x, chart_area_rect.max.y - volume_height),
+        );
+
+        // Используем новую вспомогательную функцию
+        let (actual_index, bar) =
+            self.get_bar_under_cursor_data(mouse_pos, data_window, price_rect)?;
+
+        // Проверяем, есть ли уже информация об этом баре в кеше
         if let Some(cached_index) = self.cached_bar_index {
             if cached_index == actual_index {
                 return self.cached_bar_info.clone();
             }
         }
-
-        let bar = &visible_slice[index];
 
         let dt = DateTime::<Utc>::from_timestamp_millis(bar.time).unwrap_or(Utc::now());
         let volume_str = {
@@ -79,7 +100,7 @@ impl Crosshair {
             volume_str
         );
 
-        // Cache the result
+        // Кешируем результат
         self.cached_bar_index = Some(actual_index);
         self.cached_bar_info = Some(bar_info.clone());
 
@@ -89,7 +110,7 @@ impl Crosshair {
     pub fn highlight_bar(
         &self,
         ui: &mut egui::Ui,
-        rect: Rect,
+        rect: Rect, // Это общий прямоугольник области графика
         data_window: &DataWindow,
         mouse_pos: egui::Pos2,
         scale_price: &impl Fn(f64) -> f32,
@@ -101,45 +122,34 @@ impl Crosshair {
         let price_rect =
             egui::Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.max.y - volume_height));
 
-        let (start, end) = data_window.visible_range;
-        if start >= end || end as usize > data_window.bars.len() {
-            return;
-        }
-        let visible_slice = &data_window.bars[start as usize..end as usize];
-        if visible_slice.is_empty() {
-            return;
-        }
+        let (actual_index, bar) =
+            match self.get_bar_under_cursor_data(mouse_pos, data_window, price_rect) {
+                Some(data) => data,
+                None => return,
+            };
 
-        let chart_left = price_rect.left();
-        let chart_width = price_rect.width();
-        let adjusted_x = mouse_pos.x - data_window.pixel_offset;
-        let normalized_x = (adjusted_x - chart_left) / chart_width;
-        if normalized_x < 0.0 || normalized_x >= 1.0 {
-            return;
-        }
-        let index_float = normalized_x * visible_slice.len() as f32;
-        let index = index_float.floor() as usize;
-        if index >= visible_slice.len() {
-            return;
-        }
-        let bar = &visible_slice[index];
-        let count = visible_slice.len() as f32;
-        let bar_width = (price_rect.width() / count).min(5.0);
-        let i = index as f32;
-        let x_right =
-            price_rect.left() + ((i + 1.0) / count) * price_rect.width() + data_window.pixel_offset;
-        let x_left = x_right - bar_width;
+        let (start, end) = data_window.visible_range;
+        let visible_count = (end - start) as usize;
+        let visible_index = actual_index - start as usize; // Индекс бара относительно видимого слайса
+
+        let (x_left, x_right) = drawing_util::calculate_bar_x_position(
+            visible_index,
+            visible_count,
+            price_rect,
+            data_window.pixel_offset,
+        );
+
         let high_y = scale_price(bar.high);
         let low_y = scale_price(bar.low);
 
         let expanded_rect = egui::Rect::from_min_max(
-            egui::pos2(x_left - 0.5, high_y - 0.5), // shift left top by 0.5px
-            egui::pos2(x_right + 0.5, low_y + 0.5), // shift right bottom by 0.5px
+            egui::pos2(x_left - 0.5, high_y - 0.5), // Сдвиг влево-вверх на 0.5px
+            egui::pos2(x_right + 0.5, low_y + 0.5), // Сдвиг вправо-вниз на 0.5px
         );
-        // draw filled rect
+        // Отрисовка закрашенного прямоугольника
         painter.rect_filled(
             expanded_rect,
-            1.0, // round angles
+            1.0, // Скругление углов
             highlight_color,
         );
     }
