@@ -1,3 +1,4 @@
+use crate::compress;
 use crate::db::Database;
 use crate::fetch::KLine;
 use crate::rsi::WilderRSI;
@@ -44,7 +45,8 @@ impl DataWindow {
         let mut rsi_calculator = WilderRSI::new(period);
         while current_block_start <= end_time {
             println!("Get block from db, timestamp: {}", current_block_start);
-            if let Some(mut block) = db.get_block(symbol, current_block_start)? {
+            if let Some(compressed_data) = db.get_block(symbol, current_block_start)? {
+                let mut block = compress::decompress_klines(&compressed_data)?;
                 if bars.is_empty() {
                     if let Some(i) = block.iter().position(|k| {
                         chrono::DateTime::from_timestamp_millis(k.open_time)

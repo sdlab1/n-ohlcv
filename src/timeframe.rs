@@ -1,7 +1,8 @@
-use crate::rsi;
+use crate::compress;
+use crate::datawindow::DataWindow;
 use crate::db::Database;
 use crate::fetch::{KLine, PRICE_MULTIPLIER};
-use crate::datawindow::DataWindow;
+use crate::rsi;
 use chrono::{Duration, Utc};
 use reqwest::blocking::Client;
 use std::error::Error;
@@ -13,18 +14,23 @@ const UPDATE_INTERVAL: u64 = 300;
 
 #[derive(Debug, Clone)]
 pub struct Bar {
-pub time: i64,
-pub open: f64,
-pub high: f64,
-pub low: f64,
-pub close: f64,
-pub volume: f64,
+    pub time: i64,
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
 }
 
 pub struct Timeframe;
 
 impl Timeframe {
-    pub fn update_loop(client: &Client, db: &Database, symbol: &str, data_window: &mut DataWindow) -> Result<(), Box<dyn Error>> {
+    pub fn update_loop(
+        client: &Client,
+        db: &Database,
+        symbol: &str,
+        data_window: &mut DataWindow,
+    ) -> Result<(), Box<dyn Error>> {
         let mut timer = time::Instant::now();
 
         loop {
@@ -32,9 +38,9 @@ impl Timeframe {
                 match Self::fetch_data_chunk(client, symbol) {
                     Ok(data) => {
                         Self::process_data_chunk(symbol, data, db, data_window)?;
-                    },
+                    }
                     Err(e) => {
-                            return Err(e);
+                        return Err(e);
                     }
                 }
                 timer = time::Instant::now();
@@ -57,27 +63,26 @@ impl Timeframe {
         if last_timestamp == 0 {
             println!("No data found for {}, initializing with data", symbol);
             current_time = Self::get_dbtimestamp(start_time);
-        }
-        else {
+        } else {
             current_time = last_timestamp + 60_000_000;
         }
-            while current_time < end_time {
-                if current_time != start_time {
-                    thread::sleep(std::time::Duration::from_secs(pause_between_requests));
-                }
-                let klines = crate::fetch::fetch_klines(
-                    &client,
-                    symbol,
-                    "1m",
-                    1000,
-                    Some(current_time),
-                    Some(current_time + 60_000_000),
-                )?;
-                Self::process_data_chunk(symbol, klines, db, data_window)?;
-                println!("Initialized data for {} from {}", symbol, current_time);
-                current_time += 60_000_000;
+        while current_time < end_time {
+            if current_time != start_time {
+                thread::sleep(std::time::Duration::from_secs(pause_between_requests));
             }
-        
+            let klines = crate::fetch::fetch_klines(
+                &client,
+                symbol,
+                "1m",
+                1000,
+                Some(current_time),
+                Some(current_time + 60_000_000),
+            )?;
+            Self::process_data_chunk(symbol, klines, db, data_window)?;
+            println!("Initialized data for {} from {}", symbol, current_time);
+            current_time += 60_000_000;
+        }
+
         Ok(())
     }
 
@@ -115,7 +120,8 @@ impl Timeframe {
             }
             let _rsi_val = rsi_calculator.add_price(
                 current_open_time,
-                 kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32));
+                kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32),
+            );
             /*(&
             {
                 timestamp: current_open_time as u64,
@@ -126,13 +132,15 @@ impl Timeframe {
                 });*/
             items_processed_in_loop += 1;
             count += 1;
-            if count >= timeframe_minutes as usize || (dolastbar && items_processed_in_loop == total_len) {
+            if count >= timeframe_minutes as usize
+                || (dolastbar && items_processed_in_loop == total_len)
+            {
                 result.push(Bar {
                     time: current_open_time,
                     open: current_open,
                     high: current_high,
                     low: current_low,
-                    close:  kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32),
+                    close: kline.close as f64 / 10f64.powi(PRICE_MULTIPLIER as i32),
                     volume: current_volume,
                 });
                 count = 0;
@@ -153,9 +161,11 @@ impl Timeframe {
             }
         }
         if count > 0 && items_processed_in_loop == total_len {
-             data_window.timeframe_remainder = current_processing_klines.drain(total_len - count..).collect();
+            data_window.timeframe_remainder = current_processing_klines
+                .drain(total_len - count..)
+                .collect();
         } else {
-             data_window.timeframe_remainder.clear();
+            data_window.timeframe_remainder.clear();
         }
         Ok(result)
     }
@@ -184,13 +194,11 @@ impl Timeframe {
     ) -> Result<(), Box<dyn Error>> {
         if data.len() < 1000 {
             dw.recent_data = data;
-            println!("DataWindow.recent_data len {}",
-                dw.recent_data.len()
-            );
+            println!("DataWindow.recent_data len {}", dw.recent_data.len());
             return Ok(());
         }
         for i in 1..data.len() {
-            let time_diff = data[i].open_time - data[i-1].open_time;
+            let time_diff = data[i].open_time - data[i - 1].open_time;
             if time_diff != 60_000 {
                 return Err(format!(
                     "Consistency check failed for {}: gap between {} and {} is {}ms (expected 60000ms)",
@@ -201,7 +209,8 @@ impl Timeframe {
                 ).into());
             }
         }
-        db.insert_block(symbol, data[0].open_time, &data)?;
+        let compressed_data = compress::compress_klines(&data)?;
+        db.insert_block(symbol, data[0].open_time, &compressed_data)?;
         Ok(())
     }
 }
