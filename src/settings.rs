@@ -1,4 +1,6 @@
-// settings.rs
+// settings.rs - Project constants, versions, and configuration
+// See CONVENTIONS.md for project structure and workflow
+
 pub const ZOOM_SENSITIVITY: f64 = 0.05;
 pub const DRAG_SENSITIVITY: f64 = 1.0;
 pub const CHART_MARGIN: f32 = 0.0;
@@ -9,3 +11,7 @@ pub const INITIAL_LOAD_DAYS: i64 = 15; // Количество дней для �
 pub const AVERAGE_FRAME_HISTORY_SIZE: usize = 60; // Количество кадров на значение (avg)
 pub const STATUS_MESSAGE_MAX_COUNT: usize = 8; // Максимальное количество сообщений в списке статуса
 pub const STATUS_MESSAGE_HIDE_TIME: u64 = 5;
+
+// Версия агрегации OHLCV данных - дата создания функции (до минуты)
+// Обновлено: 25 Aug 2025 14:36
+pub const AGGREGATION_VERSION: i64 = 1724587016; // Unix timestamp для 25 Aug 2025 14:36:56 UTC

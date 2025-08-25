@@ -1,3 +1,6 @@
+// fetch.rs - Binance API client, KLine struct definition, price conversion
+// See CONVENTIONS.md for project structure and workflow
+
 use reqwest::blocking::Client;
 use serde;
 use serde_json;

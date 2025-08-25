@@ -1,3 +1,6 @@
+// main.rs - Application entry point, initializes eframe with InteractiveGui
+// See CONVENTIONS.md for project structure and workflow
+
 use crate::interactivegui::InteractiveGui;
 
 mod axes;

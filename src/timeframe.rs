@@ -1,3 +1,6 @@
+// timeframe.rs - Data validation, consistency checks, database integration
+// See CONVENTIONS.md for project structure and workflow
+
 use crate::compress;
 use crate::datawindow::DataWindow;
 use crate::db::Database;
@@ -211,6 +214,12 @@ impl Timeframe {
         }
         let compressed_data = compress::compress_klines(&data)?;
         db.insert_block(symbol, data[0].open_time, &compressed_data)?;
+
+        // Запускаем агрегацию после добавления новых данных
+        if let Err(e) = db.aggregate_ohlcv_data(symbol) {
+            eprintln!("Warning: Failed to aggregate data for {}: {}", symbol, e);
+        }
+
         Ok(())
     }
 }

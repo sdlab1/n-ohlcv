@@ -4,16 +4,24 @@ version = "0.1.0"
 edition = "2021"
 include = ["src/**/*"]
 
-[profile.release] #cargo run --release 
-opt-level = 3  # Полная оптимизация
-lto = "thin"   # Оптимизация линковки (увеличивает время компиляции, но делает бинарник быстрее)
-codegen-units = 1  # Меньше параллелизма, но лучше оптимизация
-panic = "abort"  # Замена panic на abort (уменьшает размер бинарника)
+[lib]
+name = "n_ohlcv"
+path = "src/lib.rs"
+
+[[bin]]
+name = "n-ohlcv"
+path = "src/main.rs"
+
+[profile.release] #cargo run --release
+opt-level = 3     # Полная оптимизация
+lto = "thin"      # Оптимизация линковки (увеличивает время компиляции, но делает бинарник быстрее)
+codegen-units = 1 # Меньше параллелизма, но лучше оптимизация
+panic = "abort"   # Замена panic на abort (уменьшает размер бинарника)
 
 [profile.dev]
 opt-level = 2
 #opt-level = 1  # Базовая оптимизация (быстрее чем 0, но не слишком долго компилируется)
-incremental = true  # Включить инкрементальную компиляцию
+incremental = true # Включить инкрементальную компиляцию
 #codegen-units = 16  # Параллельная компиляция (быстрее, но менее оптимизировано)
 
 [dependencies]

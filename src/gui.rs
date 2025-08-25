@@ -1,4 +1,5 @@
-// gui.rs
+// gui.rs - Main GUI framework, chart layout, event handling
+// See CONVENTIONS.md for project structure and workflow
 use crate::axes_util;
 use crate::settings;
 use crate::{axes, hlcbars, interactivegui::InteractiveGui, volbars};
